@@ -676,3 +676,52 @@ body.app-active #authLaserCursor{display:none}
 @media(max-width:1150px){.dashboard-kpis{grid-template-columns:repeat(3,minmax(160px,1fr))}}
 @media(max-width:720px){.dashboard-kpis{grid-template-columns:repeat(2,minmax(140px,1fr))}.dashboard-kpis .kpi-body{padding-left:12px}.dashboard-kpis .kpi-icon{width:43px;height:43px;flex-basis:43px;font-size:21px}.dashboard-kpis .kpi-connector{min-width:7px}}
 @media(max-width:460px){.dashboard-kpis{grid-template-columns:1fr}.dashboard-kpis .kpi-card{min-height:145px}}
+
+
+/* ===== GUVEL v0.1.2 — General KPI cards: strong visual treatment ===== */
+.dashboard-kpis{gap:18px!important;align-items:stretch}
+.dashboard-kpis .kpi-card{
+  min-height:178px!important;
+  padding:0!important;
+  border:1px solid #cbd9df!important;
+  border-radius:0 26px 26px 26px!important;
+  background:
+    radial-gradient(circle at 100% 100%,rgba(12,192,223,.13),transparent 42%),
+    linear-gradient(145deg,#ffffff 0%,#f7fbfc 68%,#eef7f9 100%)!important;
+  box-shadow:0 5px 0 rgba(20,39,49,.05),0 14px 28px rgba(20,57,128,.07)!important;
+  transition:transform .18s ease,box-shadow .18s ease!important;
+}
+.dashboard-kpis .kpi-card:nth-child(even){
+  background:
+    radial-gradient(circle at 100% 100%,rgba(255,49,49,.12),transparent 42%),
+    linear-gradient(145deg,#ffffff 0%,#fffafa 68%,#fff1f1 100%)!important;
+}
+.dashboard-kpis .kpi-card::after{
+  content:"";position:absolute;right:0;bottom:0;width:74px;height:74px;
+  border-radius:100% 0 24px 0;background:rgba(12,192,223,.07);pointer-events:none;
+}
+.dashboard-kpis .kpi-top{position:relative;z-index:2;min-height:43px!important;padding:0 12px 0 0!important}
+.dashboard-kpis .kpi-label-pill{
+  min-height:38px!important;padding:0 23px 0 13px!important;
+  border-radius:0 22px 22px 0!important;
+  font-size:12px!important;font-weight:900!important;letter-spacing:.01em!important;
+  box-shadow:0 3px 0 rgba(255,49,49,.13)!important;
+}
+.dashboard-kpis .kpi-card:nth-child(even) .kpi-label-pill{background:#0cc0df!important;color:#07313a!important;box-shadow:0 3px 0 rgba(12,192,223,.16)!important}
+.dashboard-kpis .kpi-card .dashboard-config-btn{margin-top:8px!important;width:29px!important;height:29px!important;border-radius:9px!important;background:#fff!important;border-color:#d5e0e5!important;z-index:3}
+.dashboard-kpis .kpi-body{min-height:135px!important;padding:8px 14px 14px 20px!important;gap:8px!important;z-index:2}
+.dashboard-kpis .kpi-body>div:first-child{display:flex;flex-direction:column;justify-content:center;min-width:0}
+.dashboard-kpis .kpi-card .metric{font-size:34px!important;line-height:1!important;font-weight:900!important;letter-spacing:-.055em!important;text-shadow:0 1px 0 rgba(255,255,255,.8)}
+.dashboard-kpis .kpi-card:nth-child(even) .metric{color:#08a7c2!important}
+.dashboard-kpis .kpi-compare{margin-top:11px!important;font-size:11px!important;line-height:1.15!important}
+.dashboard-kpis .kpi-compare small{font-size:9px!important;font-weight:800!important;letter-spacing:.01em}
+.dashboard-kpis .kpi-connector{flex:1 1 26px!important;min-width:14px!important;border-top:2px dashed #33434b!important;opacity:.72!important}
+.dashboard-kpis .kpi-icon{
+  position:relative!important;z-index:3!important;width:61px!important;height:61px!important;flex-basis:61px!important;
+  border:0!important;border-radius:50%!important;background:#ff3131!important;color:#fff!important;
+  font-size:29px!important;box-shadow:0 0 0 5px rgba(255,49,49,.12),0 7px 15px rgba(255,49,49,.18)!important;
+}
+.dashboard-kpis .kpi-card:nth-child(even) .kpi-icon{background:#0cc0df!important;color:#07313a!important;box-shadow:0 0 0 5px rgba(12,192,223,.14),0 7px 15px rgba(12,192,223,.18)!important}
+.dashboard-kpis .kpi-card:hover{transform:translateY(-4px)!important;box-shadow:0 7px 0 rgba(20,39,49,.05),0 18px 32px rgba(20,57,128,.13)!important}
+.dashboard-kpis .kpi-cost-sub{max-width:125px!important;font-size:9px!important}
+@media(max-width:720px){.dashboard-kpis{gap:12px!important}.dashboard-kpis .kpi-card{min-height:164px!important}.dashboard-kpis .kpi-card .metric{font-size:29px!important}.dashboard-kpis .kpi-icon{width:51px!important;height:51px!important;flex-basis:51px!important;font-size:24px!important}.dashboard-kpis .kpi-body{padding-left:14px!important}}
