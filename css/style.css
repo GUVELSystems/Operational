@@ -577,3 +577,102 @@ body.cursor-hover #authLaserCursor{width:13px;height:13px;box-shadow:0 0 6px var
 body.app-active #authLaserCursor{display:none}
 @media(pointer:coarse){#authLaserCursor{display:none}}
 
+
+/* ===== GUVEL Dashboard General KPI visual refresh ===== */
+.dashboard-kpis .kpi-card{
+  min-height:154px;
+  padding:0;
+  overflow:visible;
+  border:1px solid #24313b;
+  border-radius:0 22px 22px 22px;
+  background:#fff;
+  box-shadow:0 7px 0 rgba(12,192,223,.08);
+  position:relative;
+}
+.dashboard-kpis .kpi-card::before{display:none}
+.dashboard-kpis .kpi-top{
+  min-height:38px;
+  padding:0 10px 0 0;
+  align-items:flex-start;
+}
+.dashboard-kpis .kpi-label-pill{
+  display:inline-flex;
+  align-items:center;
+  min-height:34px;
+  padding:0 18px 0 10px;
+  border-radius:0 20px 20px 0;
+  color:#fff;
+  background:#ff3131;
+  font-size:12px;
+  font-weight:900;
+  letter-spacing:-.02em;
+  white-space:nowrap;
+}
+.dashboard-kpis .kpi-card:nth-child(even) .kpi-label-pill{background:#0cc0df;color:#09232b}
+.dashboard-kpis .kpi-card .dashboard-config-btn{margin-top:7px}
+.dashboard-kpis .kpi-body{
+  position:relative;
+  min-height:112px;
+  display:flex;
+  align-items:center;
+  padding:7px 12px 12px 18px;
+  gap:5px;
+}
+.dashboard-kpis .kpi-body>div:first-child{min-width:0;flex:1;position:relative;z-index:2}
+.dashboard-kpis .kpi-card .metric{
+  font-size:25px;
+  line-height:1.1;
+  font-weight:900;
+  letter-spacing:-.04em;
+  color:#ff3131;
+  white-space:nowrap;
+}
+.dashboard-kpis .kpi-card:nth-child(even) .metric{color:#0aa8c4}
+.dashboard-kpis .kpi-compare{font-size:11px;margin-top:8px;flex-wrap:wrap;gap:3px}
+.dashboard-kpis .kpi-compare small{font-size:9px}
+.dashboard-kpis .kpi-cost-sub{font-size:9px;line-height:1.2;margin-top:5px;max-width:100px}
+.dashboard-kpis .kpi-connector{
+  flex:1 1 22px;
+  min-width:10px;
+  border-top:2px dashed #1c252c;
+  margin-top:7px;
+  position:relative;
+  opacity:.95;
+}
+.dashboard-kpis .kpi-connector::before{
+  content:"";
+  position:absolute;
+  left:-3px;
+  top:-4px;
+  width:5px;
+  height:5px;
+  border-radius:50%;
+  background:#1c252c;
+}
+.dashboard-kpis .kpi-icon{
+  width:49px;
+  height:49px;
+  flex:0 0 49px;
+  display:grid;
+  place-items:center;
+  border:3px solid #ff3131;
+  border-radius:50%;
+  background:#fff;
+  color:#ff3131;
+  font-size:25px;
+  font-weight:900;
+  line-height:1;
+  box-shadow:0 0 0 5px rgba(255,49,49,.10);
+}
+.dashboard-kpis .kpi-card:nth-child(even) .kpi-icon{
+  border-color:#0cc0df;
+  color:#0aa8c4;
+  box-shadow:0 0 0 5px rgba(12,192,223,.12);
+}
+.dashboard-kpis .kpi-card:hover{transform:translateY(-2px);box-shadow:0 9px 0 rgba(12,192,223,.12)}
+.dashboard-kpis .kpi-card .kpi-compare.positive span{color:#0aa8c4}
+.dashboard-kpis .kpi-card .kpi-compare.negative span{color:#ff3131}
+.dashboard-kpis .kpi-card .kpi-compare.neutral span{color:#65707c}
+@media(max-width:1150px){.dashboard-kpis{grid-template-columns:repeat(3,minmax(160px,1fr))}}
+@media(max-width:720px){.dashboard-kpis{grid-template-columns:repeat(2,minmax(140px,1fr))}.dashboard-kpis .kpi-body{padding-left:12px}.dashboard-kpis .kpi-icon{width:43px;height:43px;flex-basis:43px;font-size:21px}.dashboard-kpis .kpi-connector{min-width:7px}}
+@media(max-width:460px){.dashboard-kpis{grid-template-columns:1fr}.dashboard-kpis .kpi-card{min-height:145px}}
