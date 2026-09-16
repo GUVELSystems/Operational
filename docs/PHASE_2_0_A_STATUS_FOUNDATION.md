@@ -42,3 +42,8 @@ The optional Operation field is intentionally not persisted from free text in th
 - Operation becomes required when operations are configured for the selected Part Number.
 - Session insert now persists `operation_id`.
 - Existing machine names and legacy Capture behavior remain unchanged.
+
+
+## Phase 2.0.B compatibility fix
+- The frontend no longer sends `created_by` when starting a session, so existing databases without that optional column can start production.
+- Optional migration `018_phase_2_0_B_created_by_compatibility.sql` adds the column for installations that want to retain it.
