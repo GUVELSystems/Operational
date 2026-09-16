@@ -788,3 +788,39 @@ body.app-active #authLaserCursor{display:none}
 @media(prefers-reduced-motion:reduce){
   .dashboard-kpis .kpi-icon{animation:none!important;}
 }
+
+/* ===== GUVEL v0.1.7 — KPI formula border correction ===== */
+/* Keep KPI cards and formula states free from browser/default black borders. */
+.dashboard-kpis .kpi-card,
+.dashboard-kpis .kpi-card:focus,
+.dashboard-kpis .kpi-card:focus-within,
+.dashboard-kpis .kpi-card:has(.metric[data-kpi-status="active"]){
+  border:1px solid #dce7ec!important;
+  outline:none!important;
+}
+.dashboard-kpis .kpi-card:has(.metric[data-kpi-status="active"]){
+  border-color:rgba(12,192,223,.38)!important;
+}
+.dashboard-kpis .kpi-card .metric[data-kpi-status="active"]:focus,
+.dashboard-kpis .kpi-card .kpi-icon[data-kpi-status="active"]:focus{
+  outline:none!important;
+}
+.dashboard-kpis input,
+.dashboard-kpis select,
+.dashboard-config-dialog input,
+.dashboard-config-dialog select,
+.dashboard-config-dialog textarea,
+.dashboard-config-dialog input:focus,
+.dashboard-config-dialog select:focus,
+.dashboard-config-dialog textarea:focus{
+  border:1px solid #cbd9df!important;
+  outline:none!important;
+}
+.dashboard-kpis input:focus,
+.dashboard-kpis select:focus,
+.dashboard-config-dialog input:focus,
+.dashboard-config-dialog select:focus,
+.dashboard-config-dialog textarea:focus{
+  border-color:#0cc0df!important;
+  box-shadow:0 0 0 3px rgba(12,192,223,.14)!important;
+}
