@@ -1,0 +1,34 @@
+# GUVEL Operational — Phase 2.0.A
+
+## Scope
+- Renames the visible navigation module from **Capture** to **Status**.
+- Adds a non-destructive machine status foundation.
+- Shows all machines as `IDLE` or `RUNNING`.
+- Allows starting and finishing one production session per machine.
+- Preserves the legacy Capture module/function and legacy production tables.
+
+## Database
+Run `sql/017_phase_2_0_A_status_foundation.sql` in Supabase after validating that the existing `personnel` table and `public.current_company_id()` helper exist.
+
+New table: `public.machine_production_sessions`.
+
+Important relationships:
+- `company_id → companies.id`
+- `machine_id → machines.id`
+- `shift_id → shifts.id`
+- `customer_id → customers.id`
+- `part_number_id → part_numbers.id`
+- `operation_id → operations.id`
+- `operator_id / supervisor_id → personnel.id`
+
+The partial unique index prevents more than one active session on the same machine inside a company.
+
+## Deployment order
+1. Backup Supabase database.
+2. Run SQL migration 017.
+3. Deploy the static application files.
+4. Test with one machine before using the module across the plant.
+5. Do not delete or rename legacy `production_captures`, `scrap_events`, or `downtime_events`.
+
+## Known Phase 2.0.A limitation
+The optional Operation field is intentionally not persisted from free text in this foundation. Operation linkage will be completed in the next subphase using the existing operation selector and cycle-time architecture.

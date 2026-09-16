@@ -1,7 +1,7 @@
 const cfg=window.GUVEL_CONFIG;let sb=null;
 if(cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY) sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
-const navItems=['Dashboard','Capture','Customers','Part Numbers','Machines','Catalog','Registers','Personnel','Settings'];
-const navIcons={Dashboard:'▦',Capture:'＋',Customers:'♙','Part Numbers':'▤',Machines:'▥',Catalog:'◈',Registers:'☷',Personnel:'♙',Settings:'⚙'};
+const navItems=['Dashboard','Status','Customers','Part Numbers','Machines','Catalog','Registers','Personnel','Settings'];
+const navIcons={Dashboard:'▦',Status:'◉',Customers:'♙','Part Numbers':'▤',Machines:'▥',Catalog:'◈',Registers:'☷',Personnel:'♙',Settings:'⚙'};
 const nav=document.getElementById('nav'),view=document.getElementById('view');let current='Dashboard';
 function renderNav(){nav.innerHTML=navItems.map(x=>`<button class="nav-item ${x===current?'active':''}" data-page="${x}"><span class="nav-icon" aria-hidden="true">${navIcons[x]||'•'}</span><span>${x}</span></button>`).join('');nav.querySelectorAll('button').forEach(b=>b.onclick=()=>{current=b.dataset.page;renderNav();render();});}
 function head(title,desc){return `<div class="page-head"><div><div class="eyebrow">GUVEL OPERATIONAL</div><h1>${title}</h1><p>${desc}</p></div></div>`}
@@ -1103,7 +1103,7 @@ document.addEventListener('click', async (event)=>{
   }
 });
 
-function page(){switch(current){case'Dashboard':return dashboard();case'Capture':return '';case'Customers':return customersPage();case'Part Numbers':return partNumbersPage();case'Machines':return machinesPage();case'Catalog':return catalogPage();case'Registers':return registersPage();case'Personnel':return '';case'Settings':return shiftsPage();default:return '';}}
+function page(){switch(current){case'Dashboard':return dashboard();case'Status':return '';case'Customers':return customersPage();case'Part Numbers':return partNumbersPage();case'Machines':return machinesPage();case'Catalog':return catalogPage();case'Registers':return registersPage();case'Personnel':return '';case'Settings':return shiftsPage();default:return '';}}
 async function render(){
   try{
     if(!view) throw new Error('Application view container was not found.');
@@ -1112,9 +1112,9 @@ async function render(){
       await renderPersonnelPage();
       return;
     }
-    if(current==='Capture'){
+    if(current==='Status'){
       view.innerHTML='';
-      await renderCaptureFoundation();
+      await renderStatusFoundation();
       return;
     }
     view.innerHTML=page();
@@ -1253,6 +1253,26 @@ function personnelOptions(role, selected=''){
 
 /* Phase 1.7.A Capture foundation uses existing production_captures as the future source of truth.
    No write is enabled until preflight confirms actual physical columns and RLS. */
+async function renderStatusFoundation(){
+  if(!sb||!activeCompanyId){view.innerHTML='<div class="panel"><h2>Status unavailable</h2><p>Supabase configuration or active company context is missing.</p></div>';return;}
+  const [m,sh,c,p,people,sessions]=await Promise.all([
+    sb.from('machines').select('id,code,name').eq('company_id',activeCompanyId).order('code'),
+    sb.from('shifts').select('id,code,name').eq('company_id',activeCompanyId).order('code'),
+    sb.from('customers').select('id,code,name').eq('company_id',activeCompanyId).order('code'),
+    sb.from('part_numbers').select('id,customer_id,part_number,description').eq('company_id',activeCompanyId).order('part_number'),
+    sb.from('personnel').select('id,employee_id,first_name,last_name,role,is_active').eq('company_id',activeCompanyId).eq('is_active',true).order('employee_id'),
+    sb.from('machine_production_sessions').select('*,machines(code,name),shifts(code,name),customers(code,name),part_numbers(part_number,description),operations(operation_number,operation_name)').eq('company_id',activeCompanyId).eq('status','active').order('started_at')
+  ]);
+  const errors=[m,sh,c,p,people,sessions].filter(x=>x.error); if(errors.length){view.innerHTML=`<div class="panel"><h2>Status foundation not ready</h2><p>${escapeHtml(errors[0].error.message)}</p><p>Run SQL migration 017_phase_2_0_A_status_foundation.sql first.</p></div>`;return;}
+  const machines=m.data||[], shifts=sh.data||[], customers=c.data||[], parts=p.data||[], personnel=people.data||[], active=sessions.data||[];
+  const fullName=x=>[x.first_name,x.last_name].filter(Boolean).join(' ')||x.employee_id||'';
+  view.innerHTML=`<section class="page-head"><div><div class="eyebrow">GUVEL OPERATIONAL · PHASE 2.0.A</div><h1>Status</h1><p>Live machine status and production session control.</p></div><div class="capture-live-badge"><span></span>${active.length} active machine session(s)</div></section><div class="status-machine-grid" id="statusMachineGrid"></div><div class="panel status-session-panel"><div class="section-title"><div><h2>Start production session</h2><p>One active production session per machine. Legacy Capture remains unchanged.</p></div></div><form id="statusStartForm" class="form-grid"><div class="field"><label>Machine *</label><select id="stMachine" required><option value="">Select machine</option>${machines.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.name||'')}</option>`).join('')}</select></div><div class="field"><label>Shift *</label><select id="stShift" required><option value="">Select shift</option>${shifts.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.name||'')}</option>`).join('')}</select></div><div class="field"><label>Customer *</label><select id="stCustomer" required><option value="">Select customer</option>${customers.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.name||'')}</option>`).join('')}</select></div><div class="field"><label>Part Number *</label><select id="stPart" required><option value="">Select part number</option>${parts.map(x=>`<option value="${x.id}" data-customer="${x.customer_id}">${escapeHtml(x.part_number)} — ${escapeHtml(x.description||'')}</option>`).join('')}</select></div><div class="field"><label>Lot Number *</label><input id="stLot" required maxlength="120"></div><div class="field"><label>Operation</label><input id="stOperation" placeholder="Operation ID optional"></div><div class="field"><label>Operator</label><select id="stOperator"><option value="">Select operator</option>${personnel.filter(x=>x.role==='Operator').map(x=>`<option value="${x.id}">${escapeHtml(fullName(x))}</option>`).join('')}</select></div><div class="field"><label>Supervisor</label><select id="stSupervisor"><option value="">Select supervisor</option>${personnel.filter(x=>x.role==='Supervisor').map(x=>`<option value="${x.id}">${escapeHtml(fullName(x))}</option>`).join('')}</select></div><div class="form-actions"><button class="primary" type="submit">Start Production</button><div id="statusMsg" class="status"></div></div></form></div>`;
+  const grid=document.getElementById('statusMachineGrid');
+  const renderCards=()=>{grid.innerHTML=machines.map(machine=>{const s=active.find(x=>x.machine_id===machine.id);return `<article class="status-machine-card ${s?'is-running':'is-idle'}"><div class="status-machine-top"><div><div class="eyebrow">${escapeHtml(machine.code)}</div><h2>${escapeHtml(machine.name||'Machine')}</h2></div><span class="status-state">${s?'RUNNING':'IDLE'}</span></div>${s?`<div class="status-session-info"><strong>${escapeHtml(s.part_numbers?.part_number||'Part number')}</strong><span>Lot: ${escapeHtml(s.lot_number)}</span><span>Shift: ${escapeHtml(s.shifts?.code||'—')}</span><span>Started: ${new Date(s.started_at).toLocaleString()}</span></div><button class="danger status-finish" data-id="${s.id}">Finish Session</button>`:'<p class="muted">No active production session.</p>'}</article>`}).join('');grid.querySelectorAll('.status-finish').forEach(b=>b.onclick=async()=>{const r=await sb.from('machine_production_sessions').update({status:'finished',finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',b.dataset.id).eq('company_id',activeCompanyId);if(r.error)return alert(r.error.message);await renderStatusFoundation();});};
+  renderCards();
+  document.getElementById('statusStartForm').onsubmit=async e=>{e.preventDefault();const msg=document.getElementById('statusMsg');msg.textContent='Starting…';const payload={company_id:activeCompanyId,machine_id:stMachine.value,shift_id:stShift.value,customer_id:stCustomer.value,part_number_id:stPart.value,lot_number:stLot.value.trim(),operator_id:stOperator.value||null,supervisor_id:stSupervisor.value||null,created_by:(await sb.auth.getUser()).data.user?.id||null};const r=await sb.from('machine_production_sessions').insert(payload);if(r.error){msg.textContent=r.error.message;msg.className='status error';return;}await renderStatusFoundation();};
+}
+
 async function renderCaptureFoundation(){
   await loadPersonnel();
   const [c,p,m,sh,o,d]=await Promise.all([
