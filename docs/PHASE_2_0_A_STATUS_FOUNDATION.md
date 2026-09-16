@@ -32,3 +32,13 @@ The partial unique index prevents more than one active session on the same machi
 
 ## Known Phase 2.0.A limitation
 The optional Operation field is intentionally not persisted from free text in this foundation. Operation linkage will be completed in the next subphase using the existing operation selector and cycle-time architecture.
+
+## Phase 2.0.B — Status UX & Dynamic Operations
+
+- Compact responsive machine-status cards.
+- Separate Machine Status and Start Production Session sections.
+- Operation selector loads operations by Part Number.
+- When machine-specific mappings exist in `operation_machine_cycle_times`, operations are filtered by Part Number + Machine.
+- Operation becomes required when operations are configured for the selected Part Number.
+- Session insert now persists `operation_id`.
+- Existing machine names and legacy Capture behavior remain unchanged.
