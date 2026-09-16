@@ -1255,7 +1255,7 @@ function personnelOptions(role, selected=''){
    No write is enabled until preflight confirms actual physical columns and RLS. */
 async function renderStatusFoundation(){
   if(!sb||!activeCompanyId){view.innerHTML='<div class="panel"><h2>Status unavailable</h2><p>Supabase configuration or active company context is missing.</p></div>';return;}
-  const [m,sh,c,p,people,operations,opMachines,sessions]=await Promise.all([
+  const [m,sh,c,p,people,operations,opMachines,partMachineLinksResult,sessions]=await Promise.all([
     sb.from('machines').select('id,code,name').eq('company_id',activeCompanyId).order('code'),
     sb.from('shifts').select('id,code,name').eq('company_id',activeCompanyId).order('code'),
     sb.from('customers').select('id,code,name').eq('company_id',activeCompanyId).order('code'),
@@ -1263,11 +1263,12 @@ async function renderStatusFoundation(){
     sb.from('personnel').select('id,employee_id,first_name,last_name,role,is_active').eq('company_id',activeCompanyId).eq('is_active',true).order('employee_id'),
     sb.from('operations').select('id,part_number_id,operation_number,operation_name').eq('company_id',activeCompanyId).order('operation_number'),
     sb.from('operation_machine_cycle_times').select('operation_id,part_number_id,machine_id').eq('company_id',activeCompanyId),
+    sb.from('part_number_machines').select('part_number_id,machine_id').eq('company_id',activeCompanyId),
     sb.from('machine_production_sessions').select('*,machines(code,name),shifts(code,name),customers(code,name),part_numbers(part_number,description),operations(operation_number,operation_name)').eq('company_id',activeCompanyId).eq('status','active').order('started_at')
   ]);
-  const errors=[m,sh,c,p,people,operations,opMachines,sessions].filter(x=>x.error);
+  const errors=[m,sh,c,p,people,operations,opMachines,partMachineLinksResult,sessions].filter(x=>x.error);
   if(errors.length){view.innerHTML=`<div class="panel"><h2>Status foundation not ready</h2><p>${escapeHtml(errors[0].error.message)}</p><p>Confirm that the Status migrations and Phase 1.6.1 are installed.</p></div>`;return;}
-  const machines=m.data||[], shifts=sh.data||[], customers=c.data||[], parts=p.data||[], personnel=people.data||[], operationList=operations.data||[], operationMachineLinks=opMachines.data||[], active=sessions.data||[];
+  const machines=m.data||[], shifts=sh.data||[], customers=c.data||[], parts=p.data||[], personnel=people.data||[], operationList=operations.data||[], operationMachineLinks=opMachines.data||[], partMachineLinks=partMachineLinksResult.data||[], active=sessions.data||[];
   const fullName=x=>[x.first_name,x.last_name].filter(Boolean).join(' ')||x.employee_id||'';
   const activeMachineIds=new Set(active.map(x=>x.machine_id));
   view.innerHTML=`
@@ -1288,7 +1289,7 @@ async function renderStatusFoundation(){
       const s=active.find(x=>x.machine_id===machine.id);
       return `<button type="button" class="status-machine-card status-machine-card-button ${s?'is-running':'is-idle'}" data-machine-id="${machine.id}">
         <div class="status-machine-top"><div><div class="eyebrow">${escapeHtml(machine.code)}</div><h2>${escapeHtml(machine.name||'Machine')}</h2></div><span class="status-state">${s?'RUNNING':'IDLE'}</span></div>
-        ${s?`<div class="status-session-summary"><strong>${escapeHtml(s.part_numbers?.part_number||'Part number')}</strong><span>Lot: ${escapeHtml(s.lot_number||'—')}</span><span>Shift: ${escapeHtml(s.shifts?.code||'—')}</span></div>`:'<p class="muted">No active production session.</p>'}
+        ${s?`<div class="status-session-summary"><strong>Active Production</strong><span>Customer: ${escapeHtml(s.customers?.name||'—')}</span><span>Part Number: ${escapeHtml(s.part_numbers?.part_number||'—')}</span><span>Lot: ${escapeHtml(s.lot_number||'—')}</span><span>Shift: ${escapeHtml(s.shifts?.code||'—')}</span></div>`:'<p class="muted">No active production session.</p>'}
         <span class="status-card-action">${s?'Open active session':'Open machine profile'} <span aria-hidden="true">→</span></span>
       </button>`;
     }).join('');
@@ -1300,7 +1301,8 @@ async function renderStatusFoundation(){
     const machine=machines.find(x=>x.id===machineId); if(!machine)return;
     const s=active.find(x=>x.machine_id===machineId);
     const machineOps=operationMachineLinks.filter(x=>x.machine_id===machineId);
-    const machinePartIds=new Set(machineOps.map(x=>x.part_number_id));
+    const linkedPartRows=partMachineLinksResult.data||[];
+    const machinePartIds=new Set(linkedPartRows.filter(x=>x.machine_id===machineId).map(x=>x.part_number_id));
     const relatedParts=parts.filter(x=>machinePartIds.has(x.id));
     const profileRows=`<div class="status-profile-grid">
       <div><span>Machine Code</span><strong>${escapeHtml(machine.code)}</strong></div>
@@ -1327,7 +1329,7 @@ async function renderStatusFoundation(){
     const stPart=modal.querySelector('#stPart'),stCustomer=modal.querySelector('#stCustomer'),stOperation=modal.querySelector('#stOperation'),stHint=modal.querySelector('#stOperationHint'),stRequired=modal.querySelector('#stOperationRequiredHint');
     const refreshOperationOptions=()=>{const partId=stPart.value;stOperation.innerHTML='<option value="">Select operation</option>';stOperation.disabled=!partId;stOperation.required=false;if(!partId){stHint.textContent='Select a part number to load its operations.';stRequired.textContent='(select part number)';return;}let ops=operationList.filter(x=>x.part_number_id===partId);const machineOps=operationMachineLinks.filter(x=>x.part_number_id===partId&&x.machine_id===machineId).map(x=>x.operation_id);if(machineOps.length){ops=ops.filter(x=>machineOps.includes(x.id));stHint.textContent='Showing operations configured for this machine and part number.';}else{stHint.textContent='No machine-specific mapping found; showing all part-number operations.';}if(!ops.length){stHint.textContent='No operations configured for this part number.';stRequired.textContent='(not configured)';return;}stOperation.required=true;stRequired.textContent='*';stOperation.innerHTML='<option value="">Select operation</option>'+ops.map(x=>`<option value="${x.id}">${escapeHtml(x.operation_number)} — ${escapeHtml(x.operation_name||'')}</option>`).join('');};
     stPart.addEventListener('change',()=>{const selected=stPart.options[stPart.selectedIndex];if(selected?.dataset.customer&&!stCustomer.value)stCustomer.value=selected.dataset.customer;refreshOperationOptions();});
-    modal.querySelector('#statusStartForm').addEventListener('submit',async e=>{e.preventDefault();const msg=modal.querySelector('#statusMsg'),button=modal.querySelector('#statusStartButton');const payload={company_id:activeCompanyId,machine_id:machineId,shift_id:modal.querySelector('#stShift').value,customer_id:stCustomer.value,part_number_id:stPart.value,lot_number:modal.querySelector('#stLot').value.trim(),operation_id:stOperation.value||null,operator_id:modal.querySelector('#stOperator').value||null,supervisor_id:modal.querySelector('#stSupervisor').value||null};if(!payload.lot_number){msg.textContent='Lot number is required.';msg.className='status error';return;}if(stOperation.required&&!payload.operation_id){msg.textContent='Select an operation for this part number.';msg.className='status error';return;}button.disabled=true;button.textContent='Starting…';const r=await sb.from('machine_production_sessions').insert(payload);if(r.error){button.disabled=false;button.textContent='Start Production';msg.textContent=r.error.message;msg.className='status error';return;}closeModal();await renderStatusFoundation();});
+    modal.querySelector('#statusStartForm').addEventListener('submit',async e=>{e.preventDefault();const msg=modal.querySelector('#statusMsg'),button=modal.querySelector('#statusStartButton');const payload={company_id:activeCompanyId,machine_id:machineId,shift_id:modal.querySelector('#stShift').value,customer_id:stCustomer.value,part_number_id:stPart.value,lot_number:modal.querySelector('#stLot').value.trim(),operation_id:stOperation.value||null,operator_id:modal.querySelector('#stOperator').value||null,supervisor_id:modal.querySelector('#stSupervisor').value||null};if(!payload.lot_number){msg.textContent='Lot number is required.';msg.className='status error';return;}if(stOperation.required&&!payload.operation_id){msg.textContent='Select an operation for this part number.';msg.className='status error';return;}button.disabled=true;button.textContent='Starting…';const r=await sb.from('machine_production_sessions').insert(payload);if(r.error){button.disabled=false;button.textContent='Start Production';if(String(r.error.message||'').includes('uq_machine_production_sessions_active_machine')){msg.textContent='This machine already has an active production session. Refreshing status…';msg.className='status error';closeModal();await renderStatusFoundation();return;}msg.textContent=r.error.message;msg.className='status error';return;}closeModal();await renderStatusFoundation();});
   };
   renderCards();
 }
