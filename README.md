@@ -43,3 +43,7 @@ EXPERIENCE UPGRADE v9
 - Authentication screen now uses the GUVEL red laser cursor.
 - Existing application/fullscreen cursor behavior remains unchanged.
 - Cache version: GUVEL-UI9.
+
+
+## Phase 2.0.C
+Session Lifecycle & Validation for the Status module. See `docs/PHASE_2_0_C_SESSION_LIFECYCLE.md`.
