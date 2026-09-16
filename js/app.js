@@ -1263,7 +1263,7 @@ async function renderStatusFoundation(){
     sb.from('personnel').select('id,employee_id,first_name,last_name,role,is_active').eq('company_id',activeCompanyId).eq('is_active',true).order('employee_id'),
     sb.from('operations').select('id,part_number_id,operation_number,operation_name').eq('company_id',activeCompanyId).order('operation_number'),
     sb.from('operation_machine_cycle_times').select('operation_id,part_number_id,machine_id').eq('company_id',activeCompanyId),
-    sb.from('part_number_machines').select('part_number_id,machine_id').eq('company_id',activeCompanyId),
+    sb.from('part_number_machines').select('part_number_id,machine_id'),
     sb.from('machine_production_sessions').select('*,machines(code,name),shifts(code,name),customers(code,name),part_numbers(part_number,description),operations(operation_number,operation_name)').eq('company_id',activeCompanyId).eq('status','active').order('started_at')
   ]);
   const errors=[m,sh,c,p,people,operations,opMachines,partMachineLinksResult,sessions].filter(x=>x.error);
