@@ -1320,7 +1320,7 @@ async function renderStatusFoundation(){
     if(s){
       modal.querySelector('#statusModalFinish').addEventListener('click',async()=>{
         const button=modal.querySelector('#statusModalFinish');button.disabled=true;button.textContent='Finishing…';
-        const r=await sb.from('machine_production_sessions').update({status:'finished',finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);
+        const r=await sb.from('machine_production_sessions').update({status:'completed',finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);
         if(r.error){button.disabled=false;button.textContent='Finish Session';return alert(r.error.message);}
         closeModal();await renderStatusFoundation();
       });
