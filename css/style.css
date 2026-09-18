@@ -955,3 +955,16 @@ body.app-active #authLaserCursor{display:none}
 .guvel-odo-label{font-size:9px;font-weight:900;letter-spacing:1.5px;fill:#71808a}
 .guvel-odo-scale{font-size:10px;font-weight:900;fill:#71808a}
 @media(max-width:620px){.guvel-oee-legend{grid-template-columns:1fr}.guvel-oee-legend div{grid-template-columns:auto 1fr auto;grid-template-rows:auto}.guvel-oee-legend .guvel-oee-dot{grid-row:auto}.guvel-oee-legend b{grid-column:3;grid-row:1}}
+/* Phase 2.0.H.8 — balanced configurable gauges */
+.guvel-oee-track{stroke:#dce6ed!important;opacity:.72}
+.guvel-oee-value{opacity:.78!important;filter:none!important}
+.guvel-oee-center strong{font-size:34px!important;letter-spacing:-1px!important}
+.guvel-oee-core-dot{display:none!important}
+.guvel-odo-zone{fill:none!important;stroke-width:25!important;stroke-linecap:butt!important;opacity:.88}
+.guvel-odo-needle{transform-origin:180px 190px!important;transition:transform .85s cubic-bezier(.2,.8,.2,1)!important}
+.guvel-odo-value{font-size:26px!important;font-weight:950!important;fill:#143980!important}
+.guvel-odo-label{font-size:8px!important;fill:#71808a!important;letter-spacing:1.1px!important}
+.oee-color-settings{display:grid;grid-template-columns:1fr;gap:8px;margin-top:12px;padding:12px;border:1px solid #e1ebf0;border-radius:12px;background:#f7fbfc}
+.oee-color-settings strong{font-size:12px;color:#143980}
+.oee-color-settings label{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;color:#52636e}
+.oee-color-settings input[type=color]{width:42px;height:28px;padding:2px;border:1px solid #dce6ed;border-radius:6px;background:#fff}
