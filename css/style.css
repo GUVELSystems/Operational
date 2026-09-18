@@ -876,3 +876,50 @@ body.app-active #authLaserCursor{display:none}
 .odometer-value{font-size:27px!important;fill:#143980!important;font-weight:950}
 .odometer-label{font-size:8px!important;fill:#71808a!important;letter-spacing:1.1px}
 .plan-actual-values.premium div{border-radius:14px!important;background:linear-gradient(180deg,#fff,#f7fbfc)!important}
+
+/* Phase 2.0.H.5 — Balanced GUVEL instrument styling */
+.oee-premium,.odometer-premium{background:linear-gradient(145deg,#ffffff 0%,#f7fbfc 100%)!important;border:1px solid rgba(20,57,128,.12)!important;box-shadow:0 12px 28px rgba(20,57,128,.06)!important}
+.oee-ring-wrap.full.premium{max-width:390px!important;padding:4px 10px 0!important}
+.oee-ring-value{stroke-linecap:round!important;filter:drop-shadow(0 3px 5px rgba(20,57,128,.12))!important}
+.oee-ring-track{stroke:#e7eef2!important;stroke-width:22!important}
+.oee-ring-center strong{font-size:44px!important;color:#143980!important}
+.oee-ring-center span{color:#7b8b95!important;letter-spacing:1.5px!important}
+.gauge-legend.premium span{background:rgba(255,255,255,.82)!important;border-color:#e4edf1!important;box-shadow:0 4px 12px rgba(20,57,128,.035)!important}
+.clean-odometer{height:auto!important;max-width:430px!important;margin:8px auto 0!important;overflow:visible!important}
+.clean-odometer svg{display:block;width:100%;height:auto;overflow:visible}
+.odo-track{fill:none;stroke:#e7eef2;stroke-width:28;stroke-linecap:butt}
+.odo-zone{fill:none;stroke-width:24;stroke-linecap:butt}
+.odo-red{stroke:#ff3131}.odo-yellow{stroke:#f2bd21}.odo-green{stroke:#16a957}
+.odo-ticks line{stroke:#143980;stroke-width:2.5;stroke-linecap:round;opacity:.48}
+.odo-needle{transform-origin:180px 175px;transition:transform .8s cubic-bezier(.2,.8,.2,1)}
+.odo-needle line{stroke:url(#guvelNeedle);stroke-width:7;stroke-linecap:round;filter:drop-shadow(0 3px 4px rgba(20,57,128,.18))}
+.odo-needle circle{fill:#fff;stroke:#143980;stroke-width:6}
+.odo-hub{fill:#fff;stroke:#0cc0df;stroke-width:2}
+.odo-value{font-size:30px;font-weight:950;fill:#143980;letter-spacing:-1px}
+.odo-label{font-size:8px;font-weight:900;letter-spacing:1.5px;fill:#7b8b95}
+.odo-scale{font-size:10px;font-weight:900;fill:#71808a}
+/* Phase 2.0.H.6 — Reference-matched GUVEL gauges */
+.oee-premium,.odometer-premium{background:linear-gradient(145deg,#ffffff 0%,#f5fbfd 100%)!important;border:1px solid rgba(20,57,128,.13)!important;box-shadow:0 10px 24px rgba(20,57,128,.06)!important}
+.oee-ring-wrap.full.premium{max-width:410px!important;margin:8px auto 0!important;padding:0!important}
+.oee-ring{display:block;width:100%;height:auto}
+.oee-ring-track{fill:none!important;stroke:#dfe7ee!important;stroke-linecap:round!important;opacity:1!important}
+.oee-ring-value{fill:none!important;stroke-linecap:round!important;stroke-dashoffset:0!important;filter:drop-shadow(0 3px 4px rgba(20,57,128,.12))!important;transition:stroke-dasharray .8s ease!important}
+.oee-center-disc{fill:#f8fcfd;stroke:#e3edf2;stroke-width:1.5}
+.oee-center-dot{fill:#0cc0df}
+.oee-ring-center{top:0!important;bottom:0!important;justify-content:center!important;pointer-events:none}
+.oee-ring-center strong{font-size:42px!important;font-weight:900!important;letter-spacing:-1.8px!important;color:#143980!important}
+.oee-ring-center span{font-size:9px!important;letter-spacing:1.25px!important;font-weight:900!important;color:#7b8b95!important}
+.gauge-legend.premium span{border-radius:12px!important;background:#fff!important}
+.clean-odometer.guvel-odometer{height:auto!important;max-width:430px!important;margin:5px auto 0!important;overflow:visible!important}
+.guvel-odometer svg{display:block;width:100%;height:auto;overflow:visible}
+.guvel-odometer .odo-track{fill:none!important;stroke:#e1e9ef!important;stroke-width:29!important;stroke-linecap:butt!important}
+.guvel-odometer .odo-zone{fill:none!important;stroke-width:25!important;stroke-linecap:butt!important}
+.guvel-odometer .odo-green{stroke:#16a957!important}.guvel-odometer .odo-yellow{stroke:#f2bd21!important}.guvel-odometer .odo-red{stroke:#ff3131!important}
+.guvel-odometer .odo-ticks line{stroke:#143980!important;stroke-width:2.5!important;stroke-linecap:round!important;opacity:.55!important}
+.guvel-odometer .odo-needle{transform-origin:180px 190px!important;transition:transform .9s cubic-bezier(.2,.8,.2,1)!important}
+.guvel-odometer .odo-needle line{stroke:url(#guvelNeedle)!important;stroke-width:8!important;stroke-linecap:round!important;filter:drop-shadow(0 3px 4px rgba(20,57,128,.18))!important}
+.guvel-odometer .odo-needle circle{fill:#fff!important;stroke:#143980!important;stroke-width:7!important}
+.guvel-odometer .odo-hub{fill:#fff!important;stroke:#0cc0df!important;stroke-width:2!important}
+.guvel-odometer .odo-value{font-size:31px!important;font-weight:950!important;fill:#143980!important;letter-spacing:-1px!important}
+.guvel-odometer .odo-label{font-size:8px!important;font-weight:900!important;letter-spacing:1.4px!important;fill:#7b8b95!important}
+.guvel-odometer .odo-scale{font-size:10px!important;font-weight:900!important;fill:#71808a!important}
