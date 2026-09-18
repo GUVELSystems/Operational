@@ -923,3 +923,35 @@ body.app-active #authLaserCursor{display:none}
 .guvel-odometer .odo-value{font-size:31px!important;font-weight:950!important;fill:#143980!important;letter-spacing:-1px!important}
 .guvel-odometer .odo-label{font-size:8px!important;font-weight:900!important;letter-spacing:1.4px!important;fill:#7b8b95!important}
 .guvel-odometer .odo-scale{font-size:10px!important;font-weight:900!important;fill:#71808a!important}
+
+/* Phase 2.0.H.7 — definitive reference-matched GUVEL gauges */
+.guvel-gauge-card{position:relative;overflow:hidden;background:linear-gradient(145deg,#ffffff 0%,#f6fbfd 100%);border:1px solid rgba(20,57,128,.14);box-shadow:0 12px 30px rgba(20,57,128,.07)}
+.guvel-gauge-card:after{content:"";position:absolute;inset:auto -40px -70px auto;width:190px;height:190px;border-radius:50%;background:radial-gradient(circle,rgba(12,192,223,.10),transparent 68%);pointer-events:none}
+.guvel-oee-visual{position:relative;width:min(100%,430px);margin:4px auto 0;aspect-ratio:1}
+.guvel-oee-visual svg{display:block;width:100%;height:100%;filter:drop-shadow(0 8px 12px rgba(20,57,128,.08))}
+.guvel-oee-track{fill:none;stroke:#dce6ed;stroke-width:18}
+.guvel-oee-value{fill:none;stroke-width:18;stroke-linecap:round;transition:stroke-dasharray .9s cubic-bezier(.2,.8,.2,1)}
+.guvel-oee-core{fill:#f7fcfe;stroke:#dcecf1;stroke-width:2}
+.guvel-oee-core-dot{fill:#0cc0df}
+.guvel-oee-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;padding-top:2px}
+.guvel-oee-center strong{font-size:clamp(34px,4vw,48px);font-weight:950;letter-spacing:-2px;color:#143980;line-height:1}
+.guvel-oee-center span{font-size:9px;letter-spacing:1.5px;font-weight:900;color:#71808a;margin-top:8px}
+.guvel-oee-legend{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:0}
+.guvel-oee-legend div{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;gap:3px 7px;padding:11px 10px;border:1px solid #e1ebf0;border-radius:12px;background:#fff;min-width:0}
+.guvel-oee-legend .guvel-oee-dot{grid-row:1/3;width:9px;height:9px;border-radius:50%;align-self:center}
+.guvel-oee-legend span:not(.guvel-oee-dot){font-size:10px;color:#71808a;font-weight:800}
+.guvel-oee-legend b{font-size:14px;color:#142f3b}
+.guvel-odo-visual{width:min(100%,470px);margin:4px auto 0;position:relative}
+.guvel-odo-visual svg{display:block;width:100%;height:auto;overflow:visible}
+.guvel-odo-track{fill:none;stroke:#dfe8ee;stroke-width:23;stroke-linecap:butt}
+.guvel-odo-zone{fill:none;stroke-width:23;stroke-linecap:butt}
+.guvel-green{stroke:#16a957}.guvel-yellow{stroke:#f0b323}.guvel-red{stroke:#ff3131}
+.guvel-odo-ticks line{stroke:#234452;stroke-width:2.4;stroke-linecap:round;opacity:.58}
+.guvel-odo-needle{transform-origin:180px 190px;transition:transform .9s cubic-bezier(.2,.8,.2,1)}
+.guvel-odo-needle line{stroke:var(--needle,#143980);stroke-width:8;stroke-linecap:round;filter:drop-shadow(0 4px 4px rgba(20,57,128,.18))}
+.guvel-odo-needle circle{fill:#fff;stroke:var(--needle,#143980);stroke-width:7}
+.guvel-odo-hub{fill:#fff;stroke:#234452;stroke-width:3}
+.guvel-odo-value{font-size:31px;font-weight:950;fill:#143980;letter-spacing:-1px}
+.guvel-odo-label{font-size:9px;font-weight:900;letter-spacing:1.5px;fill:#71808a}
+.guvel-odo-scale{font-size:10px;font-weight:900;fill:#71808a}
+@media(max-width:620px){.guvel-oee-legend{grid-template-columns:1fr}.guvel-oee-legend div{grid-template-columns:auto 1fr auto;grid-template-rows:auto}.guvel-oee-legend .guvel-oee-dot{grid-row:auto}.guvel-oee-legend b{grid-column:3;grid-row:1}}
