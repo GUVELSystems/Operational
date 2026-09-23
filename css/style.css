@@ -968,3 +968,54 @@ body.app-active #authLaserCursor{display:none}
 .oee-color-settings strong{font-size:12px;color:#143980}
 .oee-color-settings label{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;color:#52636e}
 .oee-color-settings input[type=color]{width:42px;height:28px;padding:2px;border:1px solid #dce6ed;border-radius:6px;background:#fff}
+
+/* =========================================================
+   Phase 2.0.H.9 — Dashboard Dynamics & KPI Consistency
+   ========================================================= */
+.guvel-oee-value{opacity:.62!important;filter:saturate(.82)!important;transition:stroke-dasharray .95s cubic-bezier(.2,.8,.2,1),opacity .3s ease!important}
+.guvel-oee-track{opacity:.62!important}
+.guvel-oee-center strong{font-size:30px!important;letter-spacing:-.6px!important}
+.guvel-oee-core{fill:#f9fdff!important;stroke:#dfecef!important}
+.guvel-oee-core-dot{display:none!important}
+.guvel-oee-legend .guvel-oee-dot{opacity:.78}
+
+/* Odometer: true left-to-right 180° sweep and cleaner value placement */
+.guvel-odo-needle{transform-origin:180px 190px!important;transition:transform .95s cubic-bezier(.2,.8,.2,1)!important}
+.guvel-odo-value{font-size:24px!important;font-weight:950!important;fill:#143980!important}
+.guvel-odo-label{font-size:9px!important;letter-spacing:1.1px!important;fill:#71808a!important;font-weight:800!important}
+.guvel-odo-zone{opacity:.82!important}
+
+/* Production table readability without becoming oversized */
+.production-plan-list .production-gauge-title{font-size:17px!important;font-weight:900!important}
+.production-plan-table th{font-size:11px!important;font-weight:900!important}
+.production-plan-table td{font-size:14px!important;font-weight:700!important;padding:13px 11px!important}
+.production-plan-table td:first-child,.production-plan-table td:nth-child(2){font-weight:800!important}
+.achievement-pill{font-size:12px!important;padding:6px 10px!important}
+
+/* Dynamic module entrance */
+.guvel-dashboard-item-enter{animation:guvelDashboardItemIn .7s cubic-bezier(.2,.8,.2,1) both}
+.guvel-modelmix-enter{animation:guvelModelMixIn .9s cubic-bezier(.2,.8,.2,1) both}
+.guvel-kpi-enter{animation:guvelKpiIn .65s cubic-bezier(.2,.8,.2,1) both}
+@keyframes guvelDashboardItemIn{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes guvelModelMixIn{from{opacity:0;transform:scale(.72) rotate(-18deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+@keyframes guvelKpiIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+
+/* Quality and Downtime KPI cards use the exact General KPI structure */
+.quality-kpis.dashboard-kpis,.downtime-kpis.dashboard-kpis{grid-template-columns:repeat(6,minmax(145px,1fr))}
+.downtime-kpis.dashboard-kpis{grid-template-columns:repeat(5,minmax(145px,1fr))}
+.quality-kpis.dashboard-kpis .kpi-card:before,.downtime-kpis.dashboard-kpis .kpi-card:before{display:none!important}
+.quality-kpis.dashboard-kpis .kpi-card,.downtime-kpis.dashboard-kpis .kpi-card{min-height:154px!important;padding:16px 15px!important}
+.quality-kpis.dashboard-kpis .kpi-top,.downtime-kpis.dashboard-kpis .kpi-top{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:8px!important}
+.quality-kpis.dashboard-kpis .kpi-label-pill,.downtime-kpis.dashboard-kpis .kpi-label-pill{display:inline-flex!important;align-items:center!important;min-height:26px!important;padding:5px 9px!important;border-radius:8px!important;font-size:10px!important;font-weight:900!important;letter-spacing:.04em!important;text-transform:uppercase!important;background:#f1f5f7!important;color:#3e4a54!important}
+.quality-kpis.dashboard-kpis .kpi-card:nth-child(even) .kpi-label-pill,.downtime-kpis.dashboard-kpis .kpi-card:nth-child(even) .kpi-label-pill{background:#0cc0df!important;color:#07313a!important;opacity:.72!important}
+.quality-kpis.dashboard-kpis .kpi-body,.downtime-kpis.dashboard-kpis .kpi-body{display:flex!important;align-items:center!important;gap:10px!important;margin-top:22px!important;padding-left:2px!important}
+.quality-kpis.dashboard-kpis .kpi-body>div:first-child,.downtime-kpis.dashboard-kpis .kpi-body>div:first-child{min-width:0!important;flex:1!important}
+.quality-kpis.dashboard-kpis .metric,.downtime-kpis.dashboard-kpis .metric{font-size:34px!important;line-height:1!important;font-weight:900!important;letter-spacing:-.055em!important;color:#14202b!important}
+.quality-kpis.dashboard-kpis .kpi-connector,.downtime-kpis.dashboard-kpis .kpi-connector{width:20px!important;height:1px!important;background:#d9e1e6!important;display:block!important;flex:none!important}
+.quality-kpis.dashboard-kpis .kpi-icon,.downtime-kpis.dashboard-kpis .kpi-icon{width:48px!important;height:48px!important;flex:0 0 48px!important;border-radius:50%!important;display:grid!important;place-items:center!important;background:#eef4f6!important;color:#60707a!important;font-size:22px!important;font-weight:900!important;box-shadow:0 0 0 5px rgba(12,192,223,.08)!important}
+.quality-kpis.dashboard-kpis .kpi-card:nth-child(even) .kpi-icon,.downtime-kpis.dashboard-kpis .kpi-card:nth-child(even) .kpi-icon{background:#0cc0df!important;color:#07313a!important;box-shadow:0 0 0 5px rgba(12,192,223,.14),0 7px 15px rgba(12,192,223,.18)!important}
+.quality-kpis.dashboard-kpis .kpi-compare,.downtime-kpis.dashboard-kpis .kpi-compare{margin-top:8px!important}
+.quality-kpis.dashboard-kpis .kpi-card:hover,.downtime-kpis.dashboard-kpis .kpi-card:hover{transform:translateY(-4px)!important;box-shadow:0 7px 0 rgba(20,39,49,.05),0 18px 32px rgba(20,57,128,.13)!important}
+@media(max-width:1150px){.quality-kpis.dashboard-kpis{grid-template-columns:repeat(3,minmax(160px,1fr))}.downtime-kpis.dashboard-kpis{grid-template-columns:repeat(3,minmax(160px,1fr))}}
+@media(max-width:720px){.quality-kpis.dashboard-kpis,.downtime-kpis.dashboard-kpis{grid-template-columns:repeat(2,minmax(140px,1fr))}.quality-kpis.dashboard-kpis .metric,.downtime-kpis.dashboard-kpis .metric{font-size:29px!important}.quality-kpis.dashboard-kpis .kpi-icon,.downtime-kpis.dashboard-kpis .kpi-icon{width:45px!important;height:45px!important;flex-basis:45px!important}}
+@media(max-width:460px){.quality-kpis.dashboard-kpis,.downtime-kpis.dashboard-kpis{grid-template-columns:1fr}}
