@@ -1019,3 +1019,21 @@ body.app-active #authLaserCursor{display:none}
 @media(max-width:1150px){.quality-kpis.dashboard-kpis{grid-template-columns:repeat(3,minmax(160px,1fr))}.downtime-kpis.dashboard-kpis{grid-template-columns:repeat(3,minmax(160px,1fr))}}
 @media(max-width:720px){.quality-kpis.dashboard-kpis,.downtime-kpis.dashboard-kpis{grid-template-columns:repeat(2,minmax(140px,1fr))}.quality-kpis.dashboard-kpis .metric,.downtime-kpis.dashboard-kpis .metric{font-size:29px!important}.quality-kpis.dashboard-kpis .kpi-icon,.downtime-kpis.dashboard-kpis .kpi-icon{width:45px!important;height:45px!important;flex-basis:45px!important}}
 @media(max-width:460px){.quality-kpis.dashboard-kpis,.downtime-kpis.dashboard-kpis{grid-template-columns:1fr}}
+
+/* ===== GUVEL Phase 2.0.H.10 — KPI scale, threshold LED pulse and gauge animation ===== */
+.guvel-oee-value{transition:stroke-dashoffset 1.15s cubic-bezier(.2,.8,.2,1)!important;}
+.guvel-odo-needle{transform-origin:180px 190px!important;transition:transform 1.15s cubic-bezier(.2,.8,.2,1)!important;}
+.dashboard-kpis .kpi-card .kpi-icon[data-kpi-status="active"]{animation:guvelKpiLedPulse 1.25s ease-in-out infinite!important;}
+@keyframes guvelKpiLedPulse{0%,100%{transform:scale(1);box-shadow:0 0 0 4px color-mix(in srgb,var(--kpi-status) 12%,transparent),0 4px 10px color-mix(in srgb,var(--kpi-status) 14%,transparent)}50%{transform:scale(1.07);box-shadow:0 0 0 7px color-mix(in srgb,var(--kpi-status) 20%,transparent),0 7px 18px color-mix(in srgb,var(--kpi-status) 28%,transparent)}}
+.quality-kpis.dashboard-kpis,.downtime-kpis.dashboard-kpis{gap:10px!important;}
+.quality-kpis.dashboard-kpis .kpi-card,.downtime-kpis.dashboard-kpis .kpi-card{min-height:118px!important;padding:11px 11px!important;}
+.quality-kpis.dashboard-kpis .kpi-body,.downtime-kpis.dashboard-kpis .kpi-body{gap:7px!important;margin-top:12px!important;padding-left:1px!important;}
+.quality-kpis.dashboard-kpis .metric,.downtime-kpis.dashboard-kpis .metric{font-size:25px!important;line-height:1!important;letter-spacing:-.045em!important;}
+.quality-kpis.dashboard-kpis .kpi-label-pill,.downtime-kpis.dashboard-kpis .kpi-label-pill{min-height:22px!important;padding:4px 7px!important;font-size:9px!important;}
+.quality-kpis.dashboard-kpis .kpi-icon,.downtime-kpis.dashboard-kpis .kpi-icon{width:34px!important;height:34px!important;flex-basis:34px!important;font-size:16px!important;box-shadow:0 0 0 4px rgba(12,192,223,.07)!important;}
+.quality-kpis.dashboard-kpis .kpi-connector,.downtime-kpis.dashboard-kpis .kpi-connector{width:12px!important;}
+.quality-kpis.dashboard-kpis .kpi-compare,.downtime-kpis.dashboard-kpis .kpi-compare{margin-top:5px!important;font-size:10px!important;}
+.production-plan-table th,.production-plan-table td{font-size:14px!important;}
+.production-plan-table th{font-size:11px!important;font-weight:900!important;}
+.achievement-pill{font-size:15px!important;padding:6px 11px!important;font-weight:950!important;}
+@media(max-width:720px){.quality-kpis.dashboard-kpis .metric,.downtime-kpis.dashboard-kpis .metric{font-size:22px!important}.quality-kpis.dashboard-kpis .kpi-icon,.downtime-kpis.dashboard-kpis .kpi-icon{width:32px!important;height:32px!important;flex-basis:32px!important;font-size:15px!important}}

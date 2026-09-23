@@ -235,7 +235,7 @@ function productionGaugeMarkup(a){
   const pref=dashboardPrefs().kpis?.prod_oee||{};
   const colors=[pref.availabilityColor||'#0cc0df',pref.performanceColor||'#16a957',pref.qualityColor||'#ff3131'],labels=['Availability','Performance','Quality'];
   const rings=[{r:126,w:18},{r:99,w:18},{r:72,w:18}];
-  const paths=rings.map((ring,i)=>{const c=2*Math.PI*ring.r;const p=c*vals[i];return `<circle class="guvel-oee-track" cx="160" cy="160" r="${ring.r}"/><circle class="guvel-oee-value" cx="160" cy="160" r="${ring.r}" stroke="${colors[i]}" stroke-dasharray="${p.toFixed(2)} ${(c-p).toFixed(2)}"/>`;}).join('');
+  const paths=rings.map((ring,i)=>{const c=2*Math.PI*ring.r;const p=c*vals[i];return `<circle class="guvel-oee-track" cx="160" cy="160" r="${ring.r}"/><circle class="guvel-oee-value" cx="160" cy="160" r="${ring.r}" stroke="${colors[i]}" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${c.toFixed(2)}" data-progress="${vals[i]}"/>`;}).join('');
   return `<div class="production-gauge-card guvel-gauge-card guvel-oee-card"><div class="production-gauge-title-row"><div><div class="production-gauge-title">OEE</div><div class="gauge-subtitle">Overall Equipment Effectiveness</div></div>${kpiGear('prod_oee')}</div><div class="guvel-oee-visual"><svg viewBox="0 0 320 320" role="img" aria-label="OEE ${gaugeValue(a.oee)}"><g transform="rotate(-90 160 160)">${paths}</g><circle cx="160" cy="160" r="48" class="guvel-oee-core"/></svg><div class="guvel-oee-center"><strong>${gaugeValue(a.oee)}</strong><span>OEE PERCENTAGE</span></div></div><div class="guvel-oee-legend">${labels.map((l,i)=>`<div><span class="guvel-oee-dot" style="background:${colors[i]}"></span><span>${l}</span><b>${gaugeValue([a.availability,a.performance,a.quality][i])}</b></div>`).join('')}</div></div>`;
 }
 function planVsActualMarkup(a){
@@ -268,8 +268,8 @@ function modelMixMarkup(a){const mix=new Map();for(const r of a.d.prod){const ke
 function animateDashboardKpis(){document.querySelectorAll('#dashboardGeneral .kpi-card,#dashboardQuality .kpi-card,#dashboardDowntime .kpi-card').forEach((el,i)=>{el.classList.remove('guvel-kpi-enter');void el.offsetWidth;el.style.animationDelay=`${Math.min(i*55,275)}ms`;el.classList.add('guvel-kpi-enter');});}
 function animateProductionVisuals(){
   const oee=document.querySelectorAll('.guvel-oee-value');
-  oee.forEach(el=>{const target=el.getAttribute('stroke-dasharray')||'0 1';const parts=target.split(/\s+/).map(Number);const full=parts[0]+parts[1];el.style.strokeDasharray=`0 ${full}`;void el.getBoundingClientRect();requestAnimationFrame(()=>{el.style.strokeDasharray=target;});});
-  const needle=document.querySelector('.guvel-odo-needle');if(needle){const style=needle.getAttribute('style')||'';const match=style.match(/rotate\(([-0-9.]+)deg\)/);const target=match?match[1]:'0';needle.style.transform='rotate(-90deg)';void needle.getBoundingClientRect();requestAnimationFrame(()=>{needle.style.transform=`rotate(${target}deg)`;});}
+  oee.forEach((el)=>{const full=2*Math.PI*Number(el.getAttribute('r')||1);const progress=Math.max(0,Math.min(1,Number(el.dataset.progress||0)));el.style.strokeDasharray=`${full} ${full}`;el.style.strokeDashoffset=`${full}`;void el.getBoundingClientRect();requestAnimationFrame(()=>{el.style.strokeDashoffset=`${(full*(1-progress)).toFixed(2)}`;});});
+  const needle=document.querySelector('.guvel-odo-needle');if(needle){const style=needle.getAttribute('style')||'';const match=style.match(/rotate\(([-0-9.]+)deg\)/);const target=match?Number(match[1]):-90;needle.style.transform='rotate(-90deg)';void needle.getBoundingClientRect();requestAnimationFrame(()=>{needle.style.transform=`rotate(${target}deg)`;});}
   document.querySelector('.pie-mix')?.classList.add('guvel-modelmix-enter');
   document.querySelectorAll('.production-command-grid > *').forEach((el,i)=>{el.style.animationDelay=`${Math.min(i*70,280)}ms`;el.classList.add('guvel-dashboard-item-enter');});
 }
