@@ -1037,3 +1037,19 @@ body.app-active #authLaserCursor{display:none}
 .production-plan-table th{font-size:11px!important;font-weight:900!important;}
 .achievement-pill{font-size:15px!important;padding:6px 11px!important;font-weight:950!important;}
 @media(max-width:720px){.quality-kpis.dashboard-kpis .metric,.downtime-kpis.dashboard-kpis .metric{font-size:22px!important}.quality-kpis.dashboard-kpis .kpi-icon,.downtime-kpis.dashboard-kpis .kpi-icon{width:32px!important;height:32px!important;flex-basis:32px!important;font-size:15px!important}}
+
+/* ===== GUVEL Phase 2.0.H.11 — Quality/Downtime KPI card height only ===== */
+/* Reduce the outer card height without scaling or shrinking the KPI content. */
+.quality-kpis.dashboard-kpis .kpi-card,
+.downtime-kpis.dashboard-kpis .kpi-card{
+  min-height:0!important;
+  height:104px!important;
+  box-sizing:border-box!important;
+}
+
+@media(max-width:720px){
+  .quality-kpis.dashboard-kpis .kpi-card,
+  .downtime-kpis.dashboard-kpis .kpi-card{
+    height:104px!important;
+  }
+}
