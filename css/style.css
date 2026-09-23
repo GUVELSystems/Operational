@@ -1043,13 +1043,13 @@ body.app-active #authLaserCursor{display:none}
 .quality-kpis.dashboard-kpis .kpi-card,
 .downtime-kpis.dashboard-kpis .kpi-card{
   min-height:0!important;
-  height:104px!important;
+  height:138px!important;
   box-sizing:border-box!important;
 }
 
 @media(max-width:720px){
   .quality-kpis.dashboard-kpis .kpi-card,
   .downtime-kpis.dashboard-kpis .kpi-card{
-    height:104px!important;
+    height:138px!important;
   }
 }
