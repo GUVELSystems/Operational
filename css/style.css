@@ -1053,3 +1053,10 @@ body.app-active #authLaserCursor{display:none}
     height:138px!important;
   }
 }
+
+/* ===== GUVEL Phase 2.0.H.13 — Quality/Downtime KPI content containment ===== */
+.quality-kpis.dashboard-kpis .kpi-card,.downtime-kpis.dashboard-kpis .kpi-card{height:150px!important;min-height:150px!important;box-sizing:border-box!important;overflow:hidden!important;}
+.quality-kpis.dashboard-kpis .kpi-body,.downtime-kpis.dashboard-kpis .kpi-body{min-height:88px!important;height:88px!important;box-sizing:border-box!important;margin-top:12px!important;padding:5px 10px 8px 12px!important;align-items:center!important;overflow:hidden!important;}
+.quality-kpis.dashboard-kpis .kpi-body>div:first-child,.downtime-kpis.dashboard-kpis .kpi-body>div:first-child{min-width:0!important;max-width:calc(100% - 75px)!important;}
+.quality-kpis.dashboard-kpis .kpi-icon,.downtime-kpis.dashboard-kpis .kpi-icon{flex:0 0 34px!important;width:34px!important;height:34px!important;}
+@media(max-width:720px){.quality-kpis.dashboard-kpis .kpi-card,.downtime-kpis.dashboard-kpis .kpi-card{height:150px!important;min-height:150px!important}.quality-kpis.dashboard-kpis .kpi-body,.downtime-kpis.dashboard-kpis .kpi-body{height:88px!important;min-height:88px!important;}}
