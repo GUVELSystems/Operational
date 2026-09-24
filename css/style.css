@@ -1060,3 +1060,21 @@ body.app-active #authLaserCursor{display:none}
 .quality-kpis.dashboard-kpis .kpi-body>div:first-child,.downtime-kpis.dashboard-kpis .kpi-body>div:first-child{min-width:0!important;max-width:calc(100% - 75px)!important;}
 .quality-kpis.dashboard-kpis .kpi-icon,.downtime-kpis.dashboard-kpis .kpi-icon{flex:0 0 34px!important;width:34px!important;height:34px!important;}
 @media(max-width:720px){.quality-kpis.dashboard-kpis .kpi-card,.downtime-kpis.dashboard-kpis .kpi-card{height:150px!important;min-height:150px!important}.quality-kpis.dashboard-kpis .kpi-body,.downtime-kpis.dashboard-kpis .kpi-body{height:88px!important;min-height:88px!important;}}
+
+/* ===== GUVEL Phase 2.0.H.14 — Quality/Downtime KPI content fit =====
+   Supersedes the fixed heights of H.11/H.13. The card grows with its content,
+   the value scales with the card width, and the layout switches to 3 columns
+   before the value collides with the icon. */
+.quality-kpis.dashboard-kpis,.downtime-kpis.dashboard-kpis{align-items:stretch!important}
+.quality-kpis.dashboard-kpis .kpi-card,.downtime-kpis.dashboard-kpis .kpi-card{height:auto!important;min-height:132px!important;display:flex!important;flex-direction:column!important;container-type:inline-size;box-sizing:border-box!important}
+.quality-kpis.dashboard-kpis .kpi-top,.downtime-kpis.dashboard-kpis .kpi-top{flex:none!important;margin-bottom:10px!important}
+.quality-kpis.dashboard-kpis .kpi-body,.downtime-kpis.dashboard-kpis .kpi-body{height:auto!important;min-height:0!important;margin-top:auto!important;padding:0 8px 2px 2px!important;gap:7px!important;overflow:visible!important}
+.quality-kpis.dashboard-kpis .kpi-body>div:first-child,.downtime-kpis.dashboard-kpis .kpi-body>div:first-child{flex:1 1 auto!important;min-width:0!important;max-width:none!important}
+.quality-kpis.dashboard-kpis .metric,.downtime-kpis.dashboard-kpis .metric{font-size:clamp(17px,12.5cqi,25px)!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;padding-bottom:1px}
+.quality-kpis.dashboard-kpis .kpi-compare,.downtime-kpis.dashboard-kpis .kpi-compare{flex-wrap:wrap!important;column-gap:5px!important;row-gap:1px!important}
+.quality-kpis.dashboard-kpis .kpi-compare span,.quality-kpis.dashboard-kpis .kpi-compare small,.downtime-kpis.dashboard-kpis .kpi-compare span,.downtime-kpis.dashboard-kpis .kpi-compare small{white-space:nowrap!important}
+.quality-kpis.dashboard-kpis .kpi-connector,.quality-kpis.dashboard-kpis .kpi-icon,.downtime-kpis.dashboard-kpis .kpi-connector,.downtime-kpis.dashboard-kpis .kpi-icon{flex:none!important}
+@media(max-width:1279px){.quality-kpis.dashboard-kpis,.downtime-kpis.dashboard-kpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+@media(max-width:720px){.quality-kpis.dashboard-kpis,.downtime-kpis.dashboard-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}.quality-kpis.dashboard-kpis .kpi-card,.downtime-kpis.dashboard-kpis .kpi-card{height:auto!important;min-height:128px!important}.quality-kpis.dashboard-kpis .kpi-body,.downtime-kpis.dashboard-kpis .kpi-body{height:auto!important;min-height:0!important}}
+@media(max-width:460px){.quality-kpis.dashboard-kpis,.downtime-kpis.dashboard-kpis{grid-template-columns:1fr!important}}
+@media(prefers-reduced-motion:reduce){.dashboard-kpis .kpi-card .kpi-icon[data-kpi-status="active"]{animation:none!important}}
