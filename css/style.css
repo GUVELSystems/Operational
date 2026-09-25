@@ -58,7 +58,7 @@
 
 /* ---------- 2. Base ---------- */
 *,*::before,*::after{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;scrollbar-gutter:stable}
 body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 h1,h2,h3,h4{margin:0;line-height:1.2;color:var(--ink)}
 h1{font-family:var(--serif);font-weight:700;font-size:30px;letter-spacing:-.005em}
@@ -473,7 +473,7 @@ body.app-active #authLaserCursor{display:none}
 .dashboard-fullscreen .content{max-width:none;padding:16px 18px}
 .dashboard-fit-ready #dash{width:calc(100% / var(--dash-scale,1));transform-origin:top left}
 
-.dashboard-fullscreen #app{height:100vh;overflow-y:auto;overflow-x:hidden}
+.dashboard-fullscreen #app{height:100vh;overflow-y:auto;overflow-x:hidden;scrollbar-gutter:stable}
 
 /* ---------- 16. Status ---------- */
 .status-section{margin-top:18px}
@@ -686,7 +686,7 @@ body.status-modal-open,.status-modal-open{overflow:hidden}
 .brand-rule{width:1px;height:30px;background:#2F4463;flex:none}
 .brand-word{display:inline-flex;flex-direction:column;width:max-content}
 .brand-lockup .brand-word strong{display:flex;justify-content:space-between;gap:.18em;font-family:var(--serif);font-weight:700;font-size:22px;line-height:1;letter-spacing:0;color:#fff}
-.brand-lockup .brand-word small{display:block;margin-top:6px;font-family:var(--serif);font-weight:400;font-size:10.5px;line-height:1;letter-spacing:.02em;color:var(--cyan);white-space:nowrap}
+.brand-lockup .brand-word small{display:block;margin-top:6px;margin-right:-.2435em;font-family:var(--serif);font-weight:400;font-size:10.5px;line-height:1;letter-spacing:.2435em;color:var(--cyan);white-space:nowrap}
 @media (max-width:520px){.brand-lockup .brand-word small{display:none}.brand-lockup .brand-word strong{gap:.22em}.brand-rule{height:24px}.brand-lockup .brand-logo{height:30px}}
 
 /* ---------- 23. Plant Now (Phase 3.0.C) ---------- */
@@ -699,9 +699,14 @@ body.status-modal-open,.status-modal-open{overflow:hidden}
 .plant-row.is-offset{margin-left:calc((var(--hex-w) + var(--hex-gap)) / 2)}
 .plant-hex{--edge:var(--idle);position:relative;flex:none;display:grid;place-items:center;width:var(--hex-w);height:calc(var(--hex-w) * 1.1547);min-height:0;padding:0;border:0;border-radius:0;background:var(--edge);clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);color:var(--ink);font-weight:400;white-space:normal;line-height:1.15}
 .plant-hex i{position:absolute;inset:2px;clip-path:inherit;background:var(--surface);transition:background .15s}
-.plant-hex span{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;text-align:center}
-.plant-hex small{font-size:calc(var(--hex-w) * .12);color:var(--text-2);letter-spacing:.02em}
-.plant-hex b{font-family:var(--fig);font-weight:600;font-size:calc(var(--hex-w) * .19);font-variant-numeric:tabular-nums;color:var(--ink)}
+.plant-hex span{position:relative;display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center;width:calc(var(--hex-w) * .8);min-width:0}
+.plant-hex small{font-size:max(11px,calc(var(--hex-w) * .1));color:var(--text-2);letter-spacing:.02em}
+.plant-hex b{font-family:var(--fig);font-weight:600;font-size:calc(var(--hex-w) * .17);line-height:1.05;font-variant-numeric:tabular-nums;color:var(--ink)}
+.plant-hex em{display:block;max-width:100%;font-style:normal;font-size:max(10px,calc(var(--hex-w) * .092));line-height:1.2;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plant-hex em.ph-op{color:var(--text-2)}
+.plant-hex em.ph-opname{color:var(--text-2)}
+.plant-hex small,.plant-hex b{white-space:nowrap}
+.plant-hex .ph-meta{display:flex;flex-direction:column;align-items:center;gap:1px;width:100%;margin-top:3px;padding-top:4px;border-top:1px solid var(--line-soft)}
 .plant-hex:hover{background:var(--edge)}
 .plant-hex:hover i{background:var(--surface-2)}
 .plant-hex:active{transform:none}
