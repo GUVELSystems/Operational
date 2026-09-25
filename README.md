@@ -1,4 +1,4 @@
-> **Current release: Phase 2.0.H.14 — Quality/Downtime KPI Content Fit.** See `docs/PHASE_2_0_H14_KPI_CONTENT_FIT.md`. The Phase 1.9.C notes below are kept as history.
+> **Current release: Phase 3.0.A — Design Foundation (new visual identity).** See `docs/PHASE_3_0_A_DESIGN_FOUNDATION.md`. Earlier notes below are kept as history.
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard
 
