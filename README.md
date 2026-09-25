@@ -1,4 +1,4 @@
-> **Current release: Phase 3.0.A — Design Foundation (new visual identity).** See `docs/PHASE_3_0_A_DESIGN_FOUNDATION.md`. Earlier notes below are kept as history.
+> **Current release: Phase 3.0.B — Compact Dashboard filters and animated Plan vs Actual needle.** See `docs/PHASE_3_0_B_DASHBOARD_FILTERS_AND_GAUGE.md` (built on 3.0.A, `docs/PHASE_3_0_A_DESIGN_FOUNDATION.md`). Earlier notes below are kept as history.
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard
 
