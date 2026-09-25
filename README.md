@@ -1,4 +1,5 @@
-> **Current release: Phase 3.0.B — Compact Dashboard filters and animated Plan vs Actual needle.** See `docs/PHASE_3_0_B_DASHBOARD_FILTERS_AND_GAUGE.md` (built on 3.0.A, `docs/PHASE_3_0_A_DESIGN_FOUNDATION.md`). Earlier notes below are kept as history.
+> **Current release: Phase 3.0.C — Plant Now dashboard and brand lockup.** See `docs/PHASE_3_0_C_PLANT_NOW_AND_BRAND.md` (built on 3.0.B and 3.0.A).
+
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard
 
