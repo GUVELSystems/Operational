@@ -679,15 +679,20 @@ body.status-modal-open,.status-modal-open{overflow:hidden}
 :is(.dashboard-chart-grid,.quality-top3-grid,.production-command-grid,.capture-event-grid,.capture-secondary-grid,.grid,.status-machine-grid,.plant-grid)>:is(.panel,.card,div,article,button){margin-top:0}
 .capture-event-grid,.capture-secondary-grid{margin-top:14px}
 
-/* ---------- 22. Brand lockup (Phase 3.0.C) ----------
-   Mark · hairline · wordmark. GUVEL is letter-justified to the tagline width. */
-.brand-lockup{gap:12px}
-.brand-lockup .brand-logo{width:auto;height:36px}
-.brand-rule{width:1px;height:30px;background:#2F4463;flex:none}
-.brand-word{display:inline-flex;flex-direction:column;width:max-content}
-.brand-lockup .brand-word strong{display:flex;justify-content:space-between;gap:.18em;font-family:var(--serif);font-weight:700;font-size:22px;line-height:1;letter-spacing:0;color:#fff}
-.brand-lockup .brand-word small{display:block;margin-top:6px;margin-right:-.2435em;font-family:var(--serif);font-weight:400;font-size:10.5px;line-height:1;letter-spacing:.2435em;color:var(--cyan);white-space:nowrap}
-@media (max-width:520px){.brand-lockup .brand-word small{display:none}.brand-lockup .brand-word strong{gap:.22em}.brand-rule{height:24px}.brand-lockup .brand-logo{height:30px}}
+/* ---------- 22. Brand lockup (Phase 3.0.E) ----------
+   Proportions taken from the reference lockup (mark height = H):
+   gap to text 0.24H · "GUVEL" cap height 0.29H · tagline cap height 0.09H ·
+   both lines the same width · text block centered on the mark. */
+.topbar{min-height:72px}
+.nav-item{min-height:72px}
+.brand-lockup{gap:13px;align-items:center}
+.brand-lockup .brand-logo{width:auto;height:64px;flex:none}
+.brand-word{display:inline-flex;flex-direction:column;width:max-content;color:var(--ice);margin-top:3.6px}
+.brand-lockup .brand-word strong{display:flex;justify-content:space-between;font-family:var(--serif);font-weight:700;font-size:25px;line-height:.78;padding-top:1px;letter-spacing:0;color:var(--ice)}
+.brand-lockup .brand-word small{display:block;margin-top:5.5px;margin-right:.03em;font-family:var(--serif);font-weight:400;font-size:8px;line-height:1;letter-spacing:-.028em;word-spacing:.2em;color:var(--ice);white-space:nowrap;text-transform:uppercase}
+.master-list{top:88px}
+@media (max-width:900px){.topbar{min-height:0}.brand{min-height:56px}.brand-word{margin-top:2.6px}.nav-item{min-height:46px}.brand-lockup .brand-logo{height:44px}.brand-lockup{gap:11px}.brand-lockup .brand-word strong{font-size:19px}.brand-lockup .brand-word small{font-size:7px;margin-top:6px}}
+@media (max-width:520px){.brand-lockup .brand-word small{display:none}.brand-lockup .brand-word strong{gap:.06em;line-height:1}.brand-lockup .brand-logo{height:34px}}
 
 /* ---------- 23. Plant Now (Phase 3.0.C) ---------- */
 .plant-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr);gap:14px;align-items:start}
@@ -737,3 +742,14 @@ body.status-modal-open,.status-modal-open{overflow:hidden}
 @media (max-width:980px){.plant-grid{grid-template-columns:1fr}}
 @media (max-width:520px){.plant-oee-big{font-size:54px}}
 @media (max-width:720px){.tabs{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}.tab{flex:none}}
+/* Top bar fit (Phase 3.0.E): hide the company label before the nav runs out of room,
+   and move the nav to its own row below 1180px. */
+@media (max-width:1400px){#companyBadge{display:none}}
+@media (max-width:1180px){
+  .topbar{flex-wrap:wrap;gap:0 12px;padding:6px 16px 0;min-height:0}
+  .brand{min-height:0;padding:2px 0 6px}
+  .top-actions{margin-left:auto}
+  .top-nav{order:3;flex-basis:100%;margin:0 -16px;padding:0 8px;border-top:1px solid #22354F}
+  .nav-item{min-height:46px}
+  .master-list{top:130px}
+}

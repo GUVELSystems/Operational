@@ -1,4 +1,4 @@
-> **Current release: Phase 3.0.D — Plant Now refinement and lockup text.** See `docs/PHASE_3_0_D_PLANT_NOW_REFINEMENT.md` (built on 3.0.C, 3.0.B and 3.0.A).
+> **Current release: Phase 3.0.E — Top-left lockup matched to the reference.** See `docs/PHASE_3_0_E_BRAND_LOCKUP.md` (built on 3.0.D, 3.0.C, 3.0.B and 3.0.A).
 
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard
