@@ -753,3 +753,44 @@ body.status-modal-open,.status-modal-open{overflow:hidden}
   .nav-item{min-height:46px}
   .master-list{top:130px}
 }
+
+/* ---------- 24. Real-time hour-by-hour capture (Phase 3.1.A) ---------- */
+.status-modal-actions{display:flex;gap:8px;margin-top:14px}
+.status-hours-pill{display:inline-flex;width:max-content;padding:2px 8px;font-size:12px;font-weight:600;color:var(--flow-ink);background:var(--flow-soft);border:1px solid var(--flow)}
+.hour-totals{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);margin:14px 0}
+.hour-totals>div{background:var(--surface);padding:10px 12px;min-width:0}
+.hour-totals span{display:block;font-size:12px;color:var(--text-3)}
+.hour-totals strong{display:block;font-family:var(--fig);font-weight:600;font-size:18px;font-variant-numeric:tabular-nums}
+.hour-override-toggle{display:flex;margin-bottom:12px;padding:9px 12px;background:var(--watch-soft);border-left:3px solid var(--watch)}
+.hour-row-list{display:flex;flex-direction:column;gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);max-height:340px;overflow-y:auto}
+.hour-row{background:var(--surface);padding:10px 14px}
+.hour-row-main{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.hour-row-main strong{font-family:var(--fig);font-weight:600;font-size:15px;flex:none}
+.hour-row-stats{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--text-2)}
+.hour-row-stats b{font-family:var(--fig);font-weight:600;color:var(--ink)}
+.hour-row-stats b.is-scrap{color:var(--stop-ink)}
+.hour-row-stats b.is-down{color:var(--watch-ink)}
+.hour-row-stats span{color:var(--text-3)}
+.hour-row-empty .hour-row-stats{font-style:italic}
+.hour-row-actions{display:flex;gap:10px;margin-top:6px}
+.hour-row-editing{background:var(--surface-2)}
+.hour-row-editing .hour-row-top{margin-bottom:8px}
+.entry-editor-form .form-actions{grid-column:1/-1}
+.hour-panel-actions{margin-top:14px}
+@media (max-width:640px){.hour-totals{grid-template-columns:repeat(2,minmax(0,1fr))}.hour-row-main{flex-direction:column;align-items:flex-start;gap:4px}}
+
+/* ---------- 25. Plant Now live machine panel (Phase 3.1.A) ---------- */
+.plant-live-modal{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
+.plant-live-body{position:relative;z-index:1;width:min(620px,100%);max-height:calc(100vh - 40px);overflow:auto;background:var(--surface);box-shadow:var(--shadow-float);padding:22px 24px;clip-path:polygon(0 0,calc(100% - 20px) 0,100% 12px,100% 100%,0 100%)}
+.plant-live-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--line-soft)}
+.plant-live-head h2{font-size:20px}
+.plant-live-state{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;letter-spacing:.06em;padding:3px 9px;border:1px solid var(--line);color:var(--text-2)}
+.plant-live-state::before{content:"";width:10px;height:11px;background:var(--idle);clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)}
+.plant-live-state.is-run{color:var(--flow-ink);border-color:var(--flow)}
+.plant-live-state.is-run::before{background:var(--flow)}
+.plant-live-state.is-watch{color:var(--watch-ink);border-color:var(--watch)}
+.plant-live-state.is-watch::before{background:var(--watch)}
+.plant-live-idle{padding:36px 10px;text-align:center;color:var(--text-2)}
+.plant-live-idle p{margin-bottom:16px}
+.plant-live-empty{padding:18px;text-align:center;color:var(--text-2);border:1px dashed var(--line);font-size:14px;margin-top:14px}
+.plant-live-refresh{font-size:12px;color:var(--text-3);margin-top:10px}

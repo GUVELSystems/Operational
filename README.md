@@ -1,4 +1,4 @@
-> **Current release: Phase 3.0.E — Top-left lockup matched to the reference.** See `docs/PHASE_3_0_E_BRAND_LOCKUP.md` (built on 3.0.D, 3.0.C, 3.0.B and 3.0.A).
+> **Current release: Phase 3.1.A — Real-time hour-by-hour capture.** See `docs/PHASE_3_1_A_REALTIME_CAPTURE.md` (built on 3.0.F, 3.0.E, 3.0.D, 3.0.C, 3.0.B and 3.0.A). Run `sql/022_phase_3_1_A_realtime_hourly_captures.sql` before deploying.
 
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard
