@@ -1,9 +1,10 @@
 const cfg=window.GUVEL_CONFIG;let sb=null;
 if(cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY) sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
 const navItems=['Dashboard','Status','Customers','Part Numbers','Machines','Catalog','Registers','Personnel','Settings'];
+const navLabels={Status:'Production'};
 const navIcons={Dashboard:'▦',Status:'◉',Customers:'♙','Part Numbers':'▤',Machines:'▥',Catalog:'◈',Registers:'☷',Personnel:'♙',Settings:'⚙'};
 const nav=document.getElementById('nav'),view=document.getElementById('view');let current='Dashboard';
-function renderNav(){nav.innerHTML=navItems.map(x=>`<button class="nav-item ${x===current?'active':''}" data-page="${x}"><span class="nav-icon" aria-hidden="true">${navIcons[x]||'•'}</span><span>${x}</span></button>`).join('');nav.querySelectorAll('button').forEach(b=>b.onclick=()=>{current=b.dataset.page;renderNav();render();});}
+function renderNav(){nav.innerHTML=navItems.map(x=>`<button class="nav-item ${x===current?'active':''}" data-page="${x}"><span class="nav-icon" aria-hidden="true">${navIcons[x]||'•'}</span><span>${escapeHtml(navLabels[x]||x)}</span></button>`).join('');nav.querySelectorAll('button').forEach(b=>b.onclick=()=>{current=b.dataset.page;renderNav();render();});}
 function head(title,desc){return `<div class="page-head"><div><div class="eyebrow">GUVEL OPERATIONAL</div><h1>${title}</h1><p>${desc}</p></div></div>`}
 function metrics(names){return `<div class="grid">${names.map(n=>`<div class="card"><div class="label">${n}</div><div class="metric">—</div><div class="label">Awaiting data</div></div>`).join('')}</div>`}
 let dashboardDataLoaded=false;let dashboardLoadingPromise=null;let dashboardState={tab:'General',production:[],scrap:[],downtime:[],customers:[],parts:[],shifts:[],machines:[],cycleTimes:[],sessions:[],filters:{period:'This Month',from:'',to:'',customer:'',part:'',shift:'',machine:''},charts:{}};
@@ -85,6 +86,104 @@ function guvelHexToRgb(h){const m=/^#?([0-9a-f]{6})$/i.exec(h||'');if(!m)return 
 function guvelMapColor(v){if(typeof v!=='string')return v;const low=v.trim().toLowerCase();if(GUVEL_LEGACY_COLORS[low])return guvelToken(GUVEL_LEGACY_COLORS[low])||v;const m=/^rgba?\(\s*(12\s*,\s*192\s*,\s*223|255\s*,\s*49\s*,\s*49|20\s*,\s*57\s*,\s*128|22\s*,\s*169\s*,\s*87)\s*(?:,\s*([\d.]+))?\s*\)$/.exec(low);if(!m)return v;const key={'12,192,223':'--chart-1','255,49,49':'--chart-2','20,57,128':'--chart-2','22,169,87':'--chart-3'}[m[1].replace(/\s/g,'')];const rgb=guvelHexToRgb(guvelToken(key));if(!rgb)return v;return `rgba(${rgb.join(',')},${m[2]==null?1:m[2]})`;}
 function guvelThemeConfig(node,depth=0){if(!node||depth>8||typeof node!=='object')return node;if(Array.isArray(node)){for(let i=0;i<node.length;i++){if(typeof node[i]==='string')node[i]=guvelMapColor(node[i]);else guvelThemeConfig(node[i],depth+1);}return node;}for(const k of Object.keys(node)){const v=node[k];if(typeof v==='string'&&/color|background|border|fill/i.test(k))node[k]=guvelMapColor(v);else if(v&&typeof v==='object'&&!(v instanceof HTMLElement)&&k!=='data'||(k==='data'&&!Array.isArray(v)))guvelThemeConfig(v,depth+1);}return node;}
 function guvelChartDefaults(){if(!window.Chart)return;const d=Chart.defaults;d.font.family=guvelToken('--sans')||'Barlow, sans-serif';d.font.size=12;d.color=guvelToken('--text-2');d.borderColor=guvelToken('--line-soft');if(d.scale&&d.scale.grid)d.scale.grid.color=guvelToken('--line-soft');if(d.plugins&&d.plugins.tooltip){const t=d.plugins.tooltip;t.backgroundColor='#0F1B2D';t.titleColor='#FFFFFF';t.bodyColor='#EAF2F8';t.borderColor='#2F4463';t.borderWidth=1;t.cornerRadius=2;t.padding=10;}if(d.plugins&&d.plugins.legend&&d.plugins.legend.labels){d.plugins.legend.labels.color=guvelToken('--text-2');d.plugins.legend.labels.boxWidth=10;d.plugins.legend.labels.boxHeight=10;}}
+/* =====================================================================
+   Phase 3.1.B — shift-bounded Real Time slots, live session OEE, color scale
+   ===================================================================== */
+function shiftTimeParts(t){const m=String(t||'').slice(0,8).split(':').map(Number);return {h:m[0]||0,m:m[1]||0,s:m[2]||0};}
+function shiftWindowFor(session){
+  const shift=session?.shifts; if(!shift?.start_time||!shift?.end_time)return null;
+  const day=new Date(session.started_at);day.setHours(0,0,0,0);
+  const a=shiftTimeParts(shift.start_time),b=shiftTimeParts(shift.end_time);
+  let start=new Date(day);start.setHours(a.h,a.m,a.s,0);
+  let end=new Date(day);end.setHours(b.h,b.m,b.s,0);
+  if(end<=start)end=new Date(end.getTime()+86400000);
+  const started=new Date(session.started_at);
+  if(started<start){start=new Date(start.getTime()-86400000);end=new Date(end.getTime()-86400000);}
+  return {start,end};
+}
+/* Hour slots clipped to the session's shift window (e.g. 07:00–16:30 only shows those hours,
+   with a shorter final slot for the odd 30 minutes). Falls back to plain calendar hours since
+   session start when the shift has no configured start/end time. */
+function realtimeSlotsFor(session,now){
+  const nowD=now||new Date();
+  const win=shiftWindowFor(session);
+  if(win){
+    const slots=[];let t=new Date(win.start);
+    while(t<win.end){const next=new Date(Math.min(t.getTime()+3600000,win.end.getTime()));if(t<=nowD)slots.push({start:new Date(t),end:next});t=next;}
+    return slots;
+  }
+  const slots=[];let t=new Date(session.started_at);t.setMinutes(0,0,0);
+  const end=new Date(nowD);end.setMinutes(0,0,0);
+  while(t<=end){slots.push({start:new Date(t),end:new Date(t.getTime()+3600000)});t=new Date(t.getTime()+3600000);}
+  return slots;
+}
+function formatClock(d){const pad=n=>String(n).padStart(2,'0');return `${pad(d.getHours())}:${pad(d.getMinutes())}`;}
+function slotLabel(slot){return `${formatClock(slot.start)} – ${formatClock(slot.end)}`;}
+function hourRowSplit(row){
+  const scrap=(row.scrap_events||[]).reduce((a,x)=>a+(x.quantity||0),0);
+  let planned=0,unplanned=0;
+  (row.downtime_events||[]).forEach(x=>{const m=Number(x.minutes)||0;if(String(x.event_type||'').toLowerCase()==='planned')planned+=m;else unplanned+=m;});
+  return {qty:row.production_quantity||0,scrap,plannedDown:planned,unplannedDown:unplanned,down:planned+unplanned};
+}
+function sessionCycleSeconds(session){
+  const key=`${session.part_number_id||'unknown-part'}|${session.operation_id||'unknown-operation'}|${session.machine_id||'unknown-machine'}`;
+  const configured=(dashboardState.cycleTimes||[]).find(x=>x.key===key);
+  const fallback=Number(session.operations?.ideal_cycle_time_seconds||0);
+  const cycle=Number(configured?.cycle_time_seconds||fallback||0);
+  return cycle>0?cycle:null;
+}
+/* Session OEE, live: unlike the Production dashboard (which measures a whole finished period),
+   Planned Production Time here is the time elapsed in the shift SO FAR (session start, or shift
+   start if later, up to now or shift end), minus the shift's excluded (break) minutes prorated
+   to that same fraction. This is what lets the numbers move as the shift progresses instead of
+   starting deep in the red on the shift's first hour. */
+function sessionOeeMetrics(session,hours,now){
+  const nowD=now||new Date();
+  const win=shiftWindowFor(session);
+  const totals=hours.reduce((a,h)=>{const t=hourRowSplit(h);a.qty+=t.qty;a.scrap+=t.scrap;a.planned+=t.plannedDown;a.unplanned+=t.unplannedDown;return a;},{qty:0,scrap:0,planned:0,unplanned:0});
+  const good=Math.max(0,totals.qty-totals.scrap);
+  let plannedMin=null;
+  if(win){
+    const clampEnd=new Date(Math.min(nowD.getTime(),win.end.getTime()));
+    const clampStart=new Date(Math.max(new Date(session.started_at).getTime(),win.start.getTime()));
+    const elapsedMin=Math.max(0,(clampEnd-clampStart)/60000);
+    const shiftTotalMin=(win.end-win.start)/60000;
+    const excluded=Number(session.shifts?.excluded_planned_minutes||0);
+    const excludedProrated=shiftTotalMin>0?excluded*Math.min(1,elapsedMin/shiftTotalMin):0;
+    plannedMin=Math.max(0,elapsedMin-excludedProrated);
+  }
+  const operatingMin=plannedMin==null?null:Math.max(0,plannedMin-totals.unplanned);
+  const availability=(plannedMin!=null&&plannedMin>0)?Math.min(1,Math.max(0,operatingMin/plannedMin)):null;
+  const cycle=sessionCycleSeconds(session);
+  const performance=(operatingMin!=null&&operatingMin>0&&cycle&&totals.qty>0)?Math.min(1,Math.max(0,(cycle*totals.qty)/(operatingMin*60))):null;
+  const quality=totals.qty>0?Math.min(1,Math.max(0,good/totals.qty)):null;
+  const oee=(availability!=null&&performance!=null&&quality!=null)?Math.min(1,Math.max(0,availability*performance*quality)):null;
+  return {totals,good,plannedMin,operatingMin,availability,performance,quality,oee};
+}
+/* Color scale: on target is "good"; within 10 points below target is "watch"; further is "bad".
+   Used consistently for the OEE ring, the four metric pills and Plant Now's hexagons. */
+function metricState(value,target){
+  if(value==null||target==null)return 'unknown';
+  if(value>=target)return 'good';
+  if(value>=target-0.10)return 'watch';
+  return 'bad';
+}
+function metricStateColor(state){return state==='good'?'var(--flow)':state==='watch'?'var(--watch)':state==='bad'?'var(--stop)':'var(--idle)';}
+function metricStateInk(state){return state==='good'?'var(--flow-ink)':state==='watch'?'var(--watch-ink)':state==='bad'?'var(--stop-ink)':'var(--text-3)';}
+function metricStateLabel(state){return state==='good'?'On track':state==='watch'?'Watch':state==='bad'?'Attention':'No data';}
+function sessionOeeRingMarkup(m,t){
+  const vals=[m.availability,m.performance,m.quality];
+  const states=[metricState(vals[0],t.availability),metricState(vals[1],t.performance),metricState(vals[2],t.quality)];
+  const rings=[{r:78,w:14},{r:60,w:14},{r:42,w:14}];
+  const paths=rings.map((ring,i)=>{const c=2*Math.PI*ring.r,v=vals[i]==null?0:vals[i],p=c*v;return `<circle class="guvel-oee-track" cx="100" cy="100" r="${ring.r}"/><circle class="guvel-oee-value" cx="100" cy="100" r="${ring.r}" style="stroke:${metricStateColor(states[i])};stroke-width:${ring.w}" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${(c*(1-v)).toFixed(2)}"/>`;}).join('');
+  const oeeState=metricState(m.oee,t.oee);
+  return `<div class="session-oee-visual"><svg viewBox="0 0 200 200" role="img" aria-label="Session OEE ${m.oee==null?'no data':(m.oee*100).toFixed(1)+'%'}"><g transform="rotate(-90 100 100)">${paths}</g><circle cx="100" cy="100" r="26" class="guvel-oee-core"/></g></svg><div class="session-oee-center"><strong style="color:${metricStateInk(oeeState)}">${m.oee==null?'—':(m.oee*100).toFixed(1)+'%'}</strong><span>OEE</span></div></div>`;
+}
+function sessionMetricPill(label,value,target){
+  const state=metricState(value,target);
+  return `<div class="session-metric-pill is-${state}"><span class="smp-label">${escapeHtml(label)}</span><strong>${value==null?'—':(value*100).toFixed(1)+'%'}</strong><small>${metricStateLabel(state)} · target ${(target*100).toFixed(0)}%</small></div>`;
+}
+
 function chartCreate(key,canvas,config){if(!window.Chart||!canvas)return;chartDestroy(key);guvelChartDefaults();guvelThemeConfig(config);if(['doughnut','pie','polarArea'].includes(config.type)&&config.options&&config.options.scales){delete config.options.scales;}if(config.options&&config.options.scales){for(const ax of Object.values(config.options.scales)){if(!ax||typeof ax!=='object')continue;ax.grid=Object.assign({color:guvelToken('--line-soft')},ax.grid||{});ax.ticks=Object.assign({color:guvelToken('--text-2')},ax.ticks||{});if(ax.title)ax.title.color=ax.title.color||guvelToken('--text-2');}}dashboardState.charts[key]=new Chart(canvas,config);}
 function niceLabels(daily){return [...daily.keys()].sort((a,b)=>a.localeCompare(b));}
 const DASH_KPI_META={oee:{label:'OEE',unit:'%',formula:'OEE = Availability × Performance × Quality'},production:{label:'Production',unit:'pieces',formula:'Production = Total production quantity recorded'},plan_actual:{label:'Plan vs Actual',unit:'%',formula:'Achievement = Actual production ÷ Planned production × 100. Planned downtime is excluded from available production time.'},scrap:{label:'Scrap',unit:'%',formula:'Scrap % = Arithmetic average of Scrap % for each Part Number in the selected scope'},ppm:{label:'PPMs',unit:'PPM',formula:'PPM = Scrap pieces ÷ Production pieces × 1,000,000'},yield:{label:'Yield',unit:'%',formula:'Yield = Good pieces ÷ Production pieces'},copq:{label:'COPQ',unit:'%',formula:'COPQ % = Poor Quality Cost ÷ Total Produced Cost'}};
@@ -495,7 +594,7 @@ function renderDashboardCharts(cmp){if(!window.Chart){dashboardStatus('Chart lib
 
 function renderTopParts(a){const el=document.getElementById('topParts');if(!el)return;const rows=[...a.partStats.entries()].map(([id,v])=>({id,...v,rate:v.production>0?v.scrap/v.production:0,name:dashboardState.parts.find(x=>x.id===id)?.part_number||'Unknown Part'})).sort((x,y)=>y.scrap-x.scrap).slice(0,5);if(!rows.length){el.innerHTML='<div class="dashboard-mini-empty">No part-number data available.</div>';return;}const max=Math.max(...rows.map(x=>x.scrap),1);el.innerHTML=rows.map((x,i)=>`<div class="top-part-row"><div class="top-part-rank">${i+1}</div><div class="top-part-main"><div><strong>${escapeHtml(x.name)}</strong><span>${dashNum(x.scrap)} scrap · ${dashPct(x.rate)}</span></div><div class="mini-track"><i style="width:${Math.max(2,(x.scrap/max)*100)}%"></i></div></div></div>`).join('');}
 
-async function loadDashboardData(force=false){if(!force&&dashboardDataLoaded){renderActiveDashboard();return dashboardState;}if(dashboardLoadingPromise)return dashboardLoadingPromise;if(!sb||!activeCompanyId){dashboardStatus('Supabase configuration or active company is missing.','error');return;}dashboardStatus('Syncing operational data…');dashboardLoadingPromise=(async()=>{try{const [prod,scrap,down,cust,parts,shifts,machines,cycleRows,sessions]=await Promise.all([sb.from('production_captures').select('id,production_date,captured_at,shift_id,customer_id,part_number_id,machine_id,operation_id,production_quantity,confirmed,operations(operation_number,operation_name,ideal_cycle_time_seconds),shifts(code,name,start_time,end_time,excluded_planned_minutes),part_numbers(part_number,piece_cost,scrap_cost),machines(code,name)').eq('company_id',activeCompanyId).order('production_date',{ascending:true}),sb.from('scrap_events').select('id,production_capture_id,company_id,scrap_catalog_id,quantity,reason,scrap_catalog(code,defect,category,operation_id,operations(operation_number,operation_name))').eq('company_id',activeCompanyId),sb.from('downtime_events').select('id,production_capture_id,company_id,downtime_catalog_id,minutes,event_type,reason,created_at,downtime_catalog(code,downtime,category)').eq('company_id',activeCompanyId),sb.from('customers').select('id,code,name').eq('company_id',activeCompanyId).order('code'),sb.from('part_numbers').select('id,customer_id,part_number').eq('company_id',activeCompanyId).order('part_number'),sb.from('shifts').select('id,code,name,start_time,end_time,excluded_planned_minutes').eq('company_id',activeCompanyId).order('code'),sb.from('machines').select('id,code,name').eq('company_id',activeCompanyId).order('code'),sb.from('operation_machine_cycle_times').select('part_number_id,operation_id,machine_id,cycle_time_seconds').eq('company_id',activeCompanyId),sb.from('machine_production_sessions').select('id,machine_id,status,started_at,shift_id,customer_id,part_number_id,operation_id,lot_number,shifts(code,name),customers(code,name),part_numbers(part_number,description),operations(operation_number,operation_name)').eq('company_id',activeCompanyId)]);for(const x of [prod,scrap,down,cust,parts,shifts,machines,cycleRows,sessions])if(x.error)throw x.error;dashboardState.production=prod.data||[];dashboardState.scrap=scrap.data||[];dashboardState.downtime=down.data||[];dashboardState.customers=cust.data||[];dashboardState.parts=parts.data||[];dashboardState.shifts=shifts.data||[];dashboardState.machines=machines.data||[];dashboardState.sessions=sessions.data||[];dashboardState.cycleTimes=(cycleRows.data||[]).map(x=>({...x,key:`${x.part_number_id||'unknown-part'}|${x.operation_id||'unknown-operation'}|${x.machine_id||'unknown-machine'}`}));dashboardDataLoaded=true;populateDashboardFilters();dashboardState.tab==='Production'?renderProductionDashboard():dashboardState.tab==='Quality'?renderQualityDashboard():dashboardState.tab==='Downtime'?renderDowntimeDashboard():renderDashboardGeneral();}catch(e){console.error('GUVEL dashboard load error',e);dashboardStatus(e.message||'Unable to load Dashboard data.','error');const box=document.getElementById('dashboardGeneral');if(box)box.innerHTML=`<div class="panel"><h2>Dashboard data error</h2><p>${escapeHtml(e.message||'Unable to load Dashboard data.')}</p></div>`;throw e;}finally{dashboardLoadingPromise=null;}})();return dashboardLoadingPromise;}
+async function loadDashboardData(force=false){if(!force&&dashboardDataLoaded){renderActiveDashboard();return dashboardState;}if(dashboardLoadingPromise)return dashboardLoadingPromise;if(!sb||!activeCompanyId){dashboardStatus('Supabase configuration or active company is missing.','error');return;}dashboardStatus('Syncing operational data…');dashboardLoadingPromise=(async()=>{try{const [prod,scrap,down,cust,parts,shifts,machines,cycleRows,sessions]=await Promise.all([sb.from('production_captures').select('id,production_date,captured_at,shift_id,customer_id,part_number_id,machine_id,operation_id,production_quantity,confirmed,operations(operation_number,operation_name,ideal_cycle_time_seconds),shifts(code,name,start_time,end_time,excluded_planned_minutes),part_numbers(part_number,piece_cost,scrap_cost),machines(code,name)').eq('company_id',activeCompanyId).order('production_date',{ascending:true}),sb.from('scrap_events').select('id,production_capture_id,company_id,scrap_catalog_id,quantity,reason,scrap_catalog(code,defect,category,operation_id,operations(operation_number,operation_name))').eq('company_id',activeCompanyId),sb.from('downtime_events').select('id,production_capture_id,company_id,downtime_catalog_id,minutes,event_type,reason,created_at,downtime_catalog(code,downtime,category)').eq('company_id',activeCompanyId),sb.from('customers').select('id,code,name').eq('company_id',activeCompanyId).order('code'),sb.from('part_numbers').select('id,customer_id,part_number').eq('company_id',activeCompanyId).order('part_number'),sb.from('shifts').select('id,code,name,start_time,end_time,excluded_planned_minutes').eq('company_id',activeCompanyId).order('code'),sb.from('machines').select('id,code,name').eq('company_id',activeCompanyId).order('code'),sb.from('operation_machine_cycle_times').select('part_number_id,operation_id,machine_id,cycle_time_seconds').eq('company_id',activeCompanyId),sb.from('machine_production_sessions').select('id,machine_id,status,started_at,shift_id,customer_id,part_number_id,operation_id,lot_number,shifts(code,name,start_time,end_time,excluded_planned_minutes),customers(code,name),part_numbers(part_number,description),operations(operation_number,operation_name,ideal_cycle_time_seconds)').eq('company_id',activeCompanyId)]);for(const x of [prod,scrap,down,cust,parts,shifts,machines,cycleRows,sessions])if(x.error)throw x.error;dashboardState.production=prod.data||[];dashboardState.scrap=scrap.data||[];dashboardState.downtime=down.data||[];dashboardState.customers=cust.data||[];dashboardState.parts=parts.data||[];dashboardState.shifts=shifts.data||[];dashboardState.machines=machines.data||[];dashboardState.sessions=sessions.data||[];dashboardState.cycleTimes=(cycleRows.data||[]).map(x=>({...x,key:`${x.part_number_id||'unknown-part'}|${x.operation_id||'unknown-operation'}|${x.machine_id||'unknown-machine'}`}));dashboardDataLoaded=true;populateDashboardFilters();dashboardState.tab==='Production'?renderProductionDashboard():dashboardState.tab==='Quality'?renderQualityDashboard():dashboardState.tab==='Downtime'?renderDowntimeDashboard():renderDashboardGeneral();}catch(e){console.error('GUVEL dashboard load error',e);dashboardStatus(e.message||'Unable to load Dashboard data.','error');const box=document.getElementById('dashboardGeneral');if(box)box.innerHTML=`<div class="panel"><h2>Dashboard data error</h2><p>${escapeHtml(e.message||'Unable to load Dashboard data.')}</p></div>`;throw e;}finally{dashboardLoadingPromise=null;}})();return dashboardLoadingPromise;}
 function populateDashboardFilters(){const c=document.getElementById('dashCustomer'),p=document.getElementById('dashPart'),s=document.getElementById('dashShift'),m=document.getElementById('dashMachine'),f=document.getElementById('dashFrom'),to=document.getElementById('dashTo'),period=document.getElementById('dashPeriod');if(!c||!p||!s||!m)return;const selectedC=dashboardState.filters.customer,selectedP=dashboardState.filters.part;c.innerHTML='<option value="">All Customers</option>'+dashboardState.customers.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.name)}</option>`).join('');c.value=selectedC;const parts=selectedC?dashboardState.parts.filter(x=>x.customer_id===selectedC):dashboardState.parts;p.innerHTML='<option value="">All Part Numbers</option>'+parts.map(x=>`<option value="${x.id}">${escapeHtml(x.part_number)}</option>`).join('');p.value=parts.some(x=>x.id===selectedP)?selectedP:'';dashboardState.filters.part=p.value;s.innerHTML='<option value="">All Shifts</option>'+dashboardState.shifts.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.name)}</option>`).join('');s.value=dashboardState.filters.shift;m.innerHTML='<option value="">All Machines</option>'+dashboardState.machines.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.name)}</option>`).join('');m.value=dashboardState.filters.machine;const pDef=dashboardPeriod();if(f)f.value=dashboardState.filters.from||pDef.from;if(to)to.value=dashboardState.filters.to||pDef.to;if(period)period.value=dashboardState.filters.period||'This Month';}
 function fitDashboardFullscreen(){
   const dash=document.getElementById('dash');
@@ -1316,7 +1415,7 @@ function personnelOptions(role, selected=''){
 /* Phase 1.7.A Capture foundation uses existing production_captures as the future source of truth.
    No write is enabled until preflight confirms actual physical columns and RLS. */
 async function renderStatusFoundation(){
-  if(!sb||!activeCompanyId){view.innerHTML='<div class="panel"><h2>Status unavailable</h2><p>Supabase configuration or active company context is missing.</p></div>';return;}
+  if(!sb||!activeCompanyId){view.innerHTML='<div class="panel"><h2>Production unavailable</h2><p>Supabase configuration or active company context is missing.</p></div>';return;}
   const [m,sh,c,p,people,operations,opMachines,partMachineLinksResult,sessions]=await Promise.all([
     sb.from('machines').select('id,code,name').eq('company_id',activeCompanyId).order('code'),
     sb.from('shifts').select('id,code,name').eq('company_id',activeCompanyId).order('code'),
@@ -1326,10 +1425,10 @@ async function renderStatusFoundation(){
     sb.from('operations').select('id,part_number_id,operation_number,operation_name').eq('company_id',activeCompanyId).order('operation_number'),
     sb.from('operation_machine_cycle_times').select('operation_id,part_number_id,machine_id').eq('company_id',activeCompanyId),
     sb.from('part_number_machines').select('part_number_id,machine_id'),
-    sb.from('machine_production_sessions').select('*,machines(code,name),shifts(code,name),customers(code,name),part_numbers(part_number,description),operations(operation_number,operation_name)').eq('company_id',activeCompanyId).order('started_at')
+    sb.from('machine_production_sessions').select('*,machines(code,name),shifts(code,name,start_time,end_time,excluded_planned_minutes),customers(code,name),part_numbers(part_number,description),operations(operation_number,operation_name,ideal_cycle_time_seconds)').eq('company_id',activeCompanyId).order('started_at')
   ]);
   const errors=[m,sh,c,p,people,operations,opMachines,partMachineLinksResult,sessions].filter(x=>x.error);
-  if(errors.length){view.innerHTML=`<div class="panel"><h2>Status foundation not ready</h2><p>${escapeHtml(errors[0].error.message)}</p><p>Confirm that the Status migrations and Phase 1.6.1 are installed.</p></div>`;return;}
+  if(errors.length){view.innerHTML=`<div class="panel"><h2>Production module not ready</h2><p>${escapeHtml(errors[0].error.message)}</p><p>Confirm the required migrations are installed.</p></div>`;return;}
   const machines=m.data||[], shifts=sh.data||[], customers=c.data||[], parts=p.data||[], personnel=people.data||[], operationList=operations.data||[], operationMachineLinks=opMachines.data||[], partMachineLinks=partMachineLinksResult.data||[], allSessions=sessions.data||[], active=allSessions.filter(x=>['RUNNING','ACTIVE','IN_PROGRESS'].includes(String(x.status||'').toUpperCase()));
   const hourCounts=new Map();
   if(active.length){const hc=await sb.from('production_captures').select('session_id,hour_slot').in('session_id',active.map(x=>x.id)).not('hour_slot','is',null);(hc.data||[]).forEach(r=>hourCounts.set(r.session_id,(hourCounts.get(r.session_id)||0)+1));}
@@ -1337,11 +1436,11 @@ async function renderStatusFoundation(){
   const activeMachineIds=new Set(active.map(x=>x.machine_id));
   view.innerHTML=`
     <section class="page-head">
-      <div><div class="eyebrow">GUVEL OPERATIONAL · PHASE 2.0.D</div><h1>Status</h1><p>Live machine status and production session control.</p></div>
+      <div><div class="eyebrow">GUVEL OPERATIONAL</div><h1>Production</h1><p>Live machine status and production session control.</p></div>
       <div class="capture-live-badge"><span></span>${active.length} active machine session(s)</div>
     </section>
     <section class="status-section">
-      <div class="section-title status-section-title"><div><h2>Machine Status</h2><p>Select a machine to open its profile and available actions.</p></div></div>
+      <div class="section-title status-section-title"><div><h2>Machine Production</h2><p>Select a machine to open its profile and available actions.</p></div></div>
       <div class="status-machine-grid" id="statusMachineGrid"></div>
     </section>
     <div id="statusMachineModal" class="status-machine-modal" hidden></div>`;
@@ -1385,14 +1484,15 @@ async function renderStatusFoundation(){
       modal.querySelector('#statusModalRealtime').addEventListener('click',()=>openHourPanel(false));
       modal.querySelector('#statusModalFinish').addEventListener('click',()=>openFinishCapture());
       const openFinishCapture=async()=>{
-        const hoursRes=await sb.from('production_captures').select('id,hour_slot,production_quantity,scrap_events(quantity),downtime_events(minutes)').eq('session_id',s.id).eq('company_id',activeCompanyId).not('hour_slot','is',null).order('hour_slot');
+        const hoursRes=await sb.from('production_captures').select('id,hour_slot,production_quantity,scrap_events(quantity),downtime_events(minutes,event_type)').eq('session_id',s.id).eq('company_id',activeCompanyId).not('hour_slot','is',null).order('hour_slot');
         const hours=(hoursRes.data||[]).slice().sort((a,b)=>a.hour_slot<b.hour_slot?-1:1);
         if(hours.length){openHourPanel(true,hours);return;}
         openLegacyFinishForm();
       };
-      const openLegacyFinishForm=()=>{
+      const openLegacyFinishForm=(replaceHours=false)=>{
         const now=new Date().toISOString();
-        modal.querySelector('.status-modal-dialog').innerHTML=`<div class="status-modal-header"><div><div class="eyebrow">FINISH SESSION · CAPTURE</div><h2 id="statusModalTitle">${escapeHtml(machine.code)} — Save and Finish Session</h2><p>Register production, scrap and downtime for this machine session.</p></div><button type="button" class="secondary status-modal-close" aria-label="Close">✕</button></div>
+        modal.querySelector('.status-modal-dialog').innerHTML=`<div class="status-modal-header"><div><div class="eyebrow">FINISH SESSION · ${replaceHours?'SINGLE ENTRY':'CAPTURE'}</div><h2 id="statusModalTitle">${escapeHtml(machine.code)} — Save and Finish Session</h2><p>${replaceHours?'This replaces every hour already captured for this session with the one entry below.':'Register production, scrap and downtime for this machine session.'}</p></div><button type="button" class="secondary status-modal-close" aria-label="Close">✕</button></div>
+        ${replaceHours?'<button type="button" class="link-btn" id="backToHours">← Back to hour-by-hour</button>':''}
         <div class="status-active-detail"><div><span>Customer</span><strong>${escapeHtml(s.customers?.name||'—')}</strong></div><div><span>Part Number</span><strong>${escapeHtml(s.part_numbers?.part_number||'—')}</strong></div><div><span>Lot</span><strong>${escapeHtml(s.lot_number||'—')}</strong></div><div><span>Shift</span><strong>${escapeHtml(s.shifts?.code||'—')}</strong></div><div><span>Operation</span><strong>${escapeHtml(s.operations?.operation_number||'—')}</strong></div><div><span>Started</span><strong>${s.started_at?new Date(s.started_at).toLocaleString():'—'}</strong></div></div>
         <form id="finishCaptureForm" class="form-grid status-modal-form"><div class="field"><label>Production Quantity *</label><input id="finishQty" type="number" min="0" step="1" required></div><div class="field"><label>Production Date *</label><input id="finishDate" type="date" value="${new Date().toISOString().slice(0,10)}" required></div>
         <div class="field"><label>Operator</label><input value="${escapeHtml(s.personnel?.first_name?`${s.personnel.first_name} ${s.personnel.last_name||''}`:'')}" disabled></div><div class="field"><label>Supervisor</label><input value="${escapeHtml(s.supervisor?.first_name?`${s.supervisor.first_name} ${s.supervisor.last_name||''}`:'')}" disabled></div>
@@ -1400,13 +1500,14 @@ async function renderStatusFoundation(){
         <div class="field" style="grid-column:1/-1"><label>Downtime entries (optional)</label><div id="finishDowntimeRows"></div><button type="button" class="secondary" id="addFinishDowntime">+ Add Downtime</button></div>
         <div class="form-actions"><button class="primary" type="submit" id="saveFinishButton">Save and Finish Session</button><div id="finishMsg" class="status" role="status" aria-live="polite"></div></div></form>`;
         modal.querySelectorAll('.status-modal-close').forEach(el=>el.addEventListener('click',closeModal));
+        modal.querySelector('#backToHours')?.addEventListener('click',()=>openHourPanel(true));
         const scrapCatalog=window.__guvelFinishScrapCatalog||[]; const downtimeCatalog=window.__guvelFinishDowntimeCatalog||[];
         const scrapRows=modal.querySelector('#finishScrapRows'),dtRows=modal.querySelector('#finishDowntimeRows');
         const scrapOptions=scrapCatalog.filter(x=>String(x.part_number_id)===String(s.part_number_id)&&(!s.operation_id||String(x.operation_id)===String(s.operation_id))).map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.defect)}</option>`).join('');
         const dtOptions=downtimeCatalog.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.downtime)}</option>`).join('');
         modal.querySelector('#addFinishScrap').onclick=()=>{const row=document.createElement('div');row.className='form-grid';row.innerHTML=`<select class="finish-scrap-id" required><option value="">Select defect</option>${scrapOptions}</select><input class="finish-scrap-qty" type="number" min="1" step="1" placeholder="Qty" required><input class="finish-scrap-reason" placeholder="Reason"><button type="button" class="danger">Delete</button>`;row.querySelector('button').onclick=()=>row.remove();scrapRows.appendChild(row);};
         modal.querySelector('#addFinishDowntime').onclick=()=>{const row=document.createElement('div');row.className='form-grid';row.innerHTML=`<select class="finish-dt-id" required><option value="">Select downtime</option>${dtOptions}</select><input class="finish-dt-min" type="number" min="0.01" step="0.01" placeholder="Minutes" required><select class="finish-dt-type" required><option value="">Type</option><option>Planned</option><option>Unplanned</option></select><input class="finish-dt-reason" placeholder="Reason"><button type="button" class="danger">Delete</button>`;row.querySelector('button').onclick=()=>row.remove();dtRows.appendChild(row);};
-        modal.querySelector('#finishCaptureForm').onsubmit=async e=>{e.preventDefault();const msg=modal.querySelector('#finishMsg'),btn=modal.querySelector('#saveFinishButton');const qty=Number(modal.querySelector('#finishQty').value);if(!Number.isInteger(qty)||qty<0){msg.textContent='Production quantity must be a whole number >= 0.';msg.className='status error';return;}const scrap=[...scrapRows.querySelectorAll('.form-grid')].map(r=>({scrap_catalog_id:r.querySelector('.finish-scrap-id').value,quantity:Number(r.querySelector('.finish-scrap-qty').value),reason:r.querySelector('.finish-scrap-reason').value.trim()||null}));const dt=[...dtRows.querySelectorAll('.form-grid')].map(r=>({downtime_catalog_id:r.querySelector('.finish-dt-id').value,minutes:Number(r.querySelector('.finish-dt-min').value),event_type:r.querySelector('.finish-dt-type').value,reason:r.querySelector('.finish-dt-reason').value.trim()||null}));const scrapTotal=scrap.reduce((a,x)=>a+x.quantity,0);if(scrapTotal>qty){msg.textContent='Total scrap cannot exceed production quantity.';msg.className='status error';return;}btn.disabled=true;btn.textContent='Saving…';let captureId=null;try{const payload={company_id:activeCompanyId,production_date:modal.querySelector('#finishDate').value,shift_id:s.shift_id,lot_number:s.lot_number,customer_id:s.customer_id,part_number_id:s.part_number_id,machine_id:s.machine_id,operation_id:s.operation_id,operator_name:null,supervisor_name:null,production_quantity:qty,confirmed:true,confirmed_at:now,session_id:s.id,hour_slot:null};const pr=await sb.from('production_captures').insert(payload).select('id').single();if(pr.error)throw new Error('Production: '+pr.error.message);captureId=pr.data.id;if(scrap.length){const sr=await sb.from('scrap_events').insert(scrap.map(x=>({...x,production_capture_id:captureId,company_id:activeCompanyId})));if(sr.error)throw new Error('Scrap: '+sr.error.message);}if(dt.length){const dr=await sb.from('downtime_events').insert(dt.map(x=>({...x,production_capture_id:captureId,company_id:activeCompanyId})));if(dr.error)throw new Error('Downtime: '+dr.error.message);}const fr=await sb.from('machine_production_sessions').update({status:'COMPLETED',finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);if(fr.error)throw new Error('Finish Session: '+fr.error.message);closeModal();dashboardDataLoaded=false;registerDataLoaded=false;await renderStatusFoundation();}catch(err){if(captureId)await sb.from('production_captures').delete().eq('id',captureId).eq('company_id',activeCompanyId);msg.textContent=err.message;msg.className='status error';btn.disabled=false;btn.textContent='Save and Finish Session';}};
+        modal.querySelector('#finishCaptureForm').onsubmit=async e=>{e.preventDefault();const msg=modal.querySelector('#finishMsg'),btn=modal.querySelector('#saveFinishButton');const qty=Number(modal.querySelector('#finishQty').value);if(!Number.isInteger(qty)||qty<0){msg.textContent='Production quantity must be a whole number >= 0.';msg.className='status error';return;}const scrap=[...scrapRows.querySelectorAll('.form-grid')].map(r=>({scrap_catalog_id:r.querySelector('.finish-scrap-id').value,quantity:Number(r.querySelector('.finish-scrap-qty').value),reason:r.querySelector('.finish-scrap-reason').value.trim()||null}));const dt=[...dtRows.querySelectorAll('.form-grid')].map(r=>({downtime_catalog_id:r.querySelector('.finish-dt-id').value,minutes:Number(r.querySelector('.finish-dt-min').value),event_type:r.querySelector('.finish-dt-type').value,reason:r.querySelector('.finish-dt-reason').value.trim()||null}));const scrapTotal=scrap.reduce((a,x)=>a+x.quantity,0);if(scrapTotal>qty){msg.textContent='Total scrap cannot exceed production quantity.';msg.className='status error';return;}btn.disabled=true;btn.textContent='Saving…';let captureId=null;try{if(replaceHours){const existing=await sb.from('production_captures').select('id').eq('session_id',s.id).eq('company_id',activeCompanyId).not('hour_slot','is',null);for(const row of (existing.data||[])){await sb.from('scrap_events').delete().eq('production_capture_id',row.id).eq('company_id',activeCompanyId);await sb.from('downtime_events').delete().eq('production_capture_id',row.id).eq('company_id',activeCompanyId);await sb.from('production_captures').delete().eq('id',row.id).eq('company_id',activeCompanyId);}}const payload={company_id:activeCompanyId,production_date:modal.querySelector('#finishDate').value,shift_id:s.shift_id,lot_number:s.lot_number,customer_id:s.customer_id,part_number_id:s.part_number_id,machine_id:s.machine_id,operation_id:s.operation_id,operator_name:null,supervisor_name:null,production_quantity:qty,confirmed:true,confirmed_at:now,session_id:s.id,hour_slot:null};const pr=await sb.from('production_captures').insert(payload).select('id').single();if(pr.error)throw new Error('Production: '+pr.error.message);captureId=pr.data.id;if(scrap.length){const sr=await sb.from('scrap_events').insert(scrap.map(x=>({...x,production_capture_id:captureId,company_id:activeCompanyId})));if(sr.error)throw new Error('Scrap: '+sr.error.message);}if(dt.length){const dr=await sb.from('downtime_events').insert(dt.map(x=>({...x,production_capture_id:captureId,company_id:activeCompanyId})));if(dr.error)throw new Error('Downtime: '+dr.error.message);}const fr=await sb.from('machine_production_sessions').update({status:'COMPLETED',finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);if(fr.error)throw new Error('Finish Session: '+fr.error.message);closeModal();dashboardDataLoaded=false;registerDataLoaded=false;await renderStatusFoundation();}catch(err){if(captureId)await sb.from('production_captures').delete().eq('id',captureId).eq('company_id',activeCompanyId);msg.textContent=err.message;msg.className='status error';btn.disabled=false;btn.textContent='Save and Finish Session';}};
       };
 window.__guvelFinishScrapCatalog=await sb.from('scrap_catalog').select('id,code,defect,part_number_id,operation_id').eq('company_id',activeCompanyId).then(x=>x.data||[]);window.__guvelFinishDowntimeCatalog=await sb.from('downtime_catalog').select('id,code,downtime').eq('company_id',activeCompanyId).then(x=>x.data||[]);
       const hourFloorISO=(d)=>{const x=new Date(d);x.setMinutes(0,0,0);return x.toISOString();};
@@ -1464,30 +1565,33 @@ window.__guvelFinishScrapCatalog=await sb.from('scrap_catalog').select('id,code,
       };
       const openHourPanel=async(finishMode,preloadedHours)=>{
         let hours=preloadedHours;
-        const reload=async()=>{const r=await sb.from('production_captures').select('id,hour_slot,production_quantity,scrap_events(quantity),downtime_events(minutes)').eq('session_id',s.id).eq('company_id',activeCompanyId).not('hour_slot','is',null).order('hour_slot');hours=(r.data||[]).slice().sort((a,b)=>a.hour_slot<b.hour_slot?-1:1);};
+        const reload=async()=>{const r=await sb.from('production_captures').select('id,hour_slot,production_quantity,scrap_events(quantity),downtime_events(minutes,event_type)').eq('session_id',s.id).eq('company_id',activeCompanyId).not('hour_slot','is',null).order('hour_slot');hours=(r.data||[]).slice().sort((a,b)=>a.hour_slot<b.hour_slot?-1:1);};
         if(!hours)await reload();
         let override=false, editingHour=null;
         const draw=()=>{
           const byHour=new Map(hours.map(h=>[new Date(h.hour_slot).toISOString(),h]));
-          const allSlots=sessionHourSlots();
+          const allSlots=realtimeSlotsFor(s,new Date());
           const slots=allSlots.length>24?allSlots.slice(-24):allSlots;
           const hiddenOlder=allSlots.length-slots.length;
-          const totals=hours.reduce((a,h)=>{const t=hourRowTotals(h);a.qty+=t.qty;a.scrap+=t.scrap;a.down+=t.down;return a;},{qty:0,scrap:0,down:0});
+          const shiftWin=shiftWindowFor(s);
+          const totals=hours.reduce((a,h)=>{const t=hourRowSplit(h);a.qty+=t.qty;a.scrap+=t.scrap;a.down+=t.down;return a;},{qty:0,scrap:0,down:0});
           const scrapPct=totals.qty?((totals.scrap/(totals.qty+totals.scrap))*100).toFixed(1):'0.0';
-          const rowsHtml=slots.map(iso=>{
+          const rowsHtml=slots.map(slot=>{
+            const iso=slot.start.toISOString();const label=slotLabel(slot);
             const h=byHour.get(iso);const isEditing=editingHour===iso;
             if(isEditing){
-              return `<div class="hour-row hour-row-editing" data-hour="${iso}"><div class="hour-row-top"><strong>${hourLabel(iso)}</strong></div><div class="hour-row-editor"></div></div>`;
+              return `<div class="hour-row hour-row-editing" data-hour="${iso}"><div class="hour-row-top"><strong>${label}</strong></div><div class="hour-row-editor"></div></div>`;
             }
-            if(h){const t=hourRowTotals(h);
-              return `<div class="hour-row" data-hour="${iso}"><div class="hour-row-main"><strong>${hourLabel(iso)}</strong><span class="hour-row-stats"><b>${t.qty}</b> good<span>·</span><b class="${t.scrap?'is-scrap':''}">${t.scrap}</b> scrap<span>·</span><b class="${t.down?'is-down':''}">${t.down.toFixed(0)}</b> min down</span></div>${override?`<div class="hour-row-actions"><button type="button" class="link-btn" data-edit-hour="${iso}">Edit</button><button type="button" class="link-btn danger-text" data-delete-hour="${iso}" data-capture="${h.id}">Delete</button></div>`:''}</div>`;
+            if(h){const t=hourRowSplit(h);
+              return `<div class="hour-row" data-hour="${iso}"><div class="hour-row-main"><strong>${label}</strong><span class="hour-row-stats"><b>${t.qty}</b> good<span>·</span><b class="${t.scrap?'is-scrap':''}">${t.scrap}</b> scrap<span>·</span><b class="${t.down?'is-down':''}">${t.down.toFixed(0)}</b> min down</span></div>${override?`<div class="hour-row-actions"><button type="button" class="link-btn" data-edit-hour="${iso}">Edit</button><button type="button" class="link-btn danger-text" data-delete-hour="${iso}" data-capture="${h.id}">Delete</button></div>`:''}</div>`;
             }
-            return `<div class="hour-row hour-row-empty" data-hour="${iso}"><div class="hour-row-main"><strong>${hourLabel(iso)}</strong><span class="hour-row-stats muted">Not logged</span></div>${(finishMode?override:true)?`<div class="hour-row-actions"><button type="button" class="link-btn" data-edit-hour="${iso}">+ Add</button></div>`:''}</div>`;
+            return `<div class="hour-row hour-row-empty" data-hour="${iso}"><div class="hour-row-main"><strong>${label}</strong><span class="hour-row-stats muted">Not logged</span></div>${(finishMode?override:true)?`<div class="hour-row-actions"><button type="button" class="link-btn" data-edit-hour="${iso}">+ Add</button></div>`:''}</div>`;
           }).join('');
           modal.querySelector('.status-modal-dialog').innerHTML=`<div class="status-modal-header"><div><div class="eyebrow">${finishMode?'FINISH SESSION · REAL TIME HOURS':'REAL TIME'}</div><h2 id="statusModalTitle">${escapeHtml(machine.code)} — ${finishMode?'Review and Finish Session':'Hour by Hour Capture'}</h2><p>${finishMode?'These hours were captured with Real Time. Review the totals or substitute what was captured before finishing the session.':'Save each hour as it happens. Finish Session will use this data automatically.'}</p></div><button type="button" class="secondary status-modal-close" aria-label="Close">✕</button></div>
-          <div class="status-active-detail"><div><span>Customer</span><strong>${escapeHtml(s.customers?.name||'—')}</strong></div><div><span>Part Number</span><strong>${escapeHtml(s.part_numbers?.part_number||'—')}</strong></div><div><span>Lot</span><strong>${escapeHtml(s.lot_number||'—')}</strong></div><div><span>Shift</span><strong>${escapeHtml(s.shifts?.code||'—')}</strong></div><div><span>Operation</span><strong>${escapeHtml(s.operations?.operation_number||'—')} ${escapeHtml(s.operations?.operation_name||'')}</strong></div><div><span>Started</span><strong>${s.started_at?new Date(s.started_at).toLocaleString():'—'}</strong></div></div>
-          <div class="hour-totals"><div><span>Good pieces</span><strong>${totals.qty.toLocaleString()}</strong></div><div><span>Scrap</span><strong>${totals.scrap.toLocaleString()}</strong></div><div><span>Scrap rate</span><strong>${scrapPct}%</strong></div><div><span>Downtime</span><strong>${totals.down.toFixed(0)} min</strong></div><div><span>Hours logged</span><strong>${hours.length} / ${slots.length}</strong></div></div>
-          ${finishMode?`<label class="check-field hour-override-toggle"><input type="checkbox" id="hourOverrideToggle" ${override?'checked':''}> Substitute information — edit or add hours before finishing</label>`:''}
+          <div class="status-active-detail"><div><span>Customer</span><strong>${escapeHtml(s.customers?.name||'—')}</strong></div><div><span>Part Number</span><strong>${escapeHtml(s.part_numbers?.part_number||'—')}</strong></div><div><span>Lot</span><strong>${escapeHtml(s.lot_number||'—')}</strong></div><div><span>Shift</span><strong>${escapeHtml(s.shifts?.code||'—')}${shiftWin?` (${formatClock(shiftWin.start)} – ${formatClock(shiftWin.end)})`:''}</strong></div><div><span>Operation</span><strong>${escapeHtml(s.operations?.operation_number||'—')} ${escapeHtml(s.operations?.operation_name||'')}</strong></div><div><span>Started</span><strong>${s.started_at?new Date(s.started_at).toLocaleString():'—'}</strong></div></div>
+          ${!shiftWin?`<p class="field-hint" style="margin:10px 0 0">This shift has no start/end time configured, so hours are listed from session start instead of the shift window.</p>`:''}
+          <div class="hour-totals"><div><span>Good pieces</span><strong>${totals.qty.toLocaleString()}</strong></div><div><span>Scrap</span><strong>${totals.scrap.toLocaleString()}</strong></div><div><span>Scrap rate</span><strong>${scrapPct}%</strong></div><div><span>Downtime</span><strong>${totals.down.toFixed(0)} min</strong></div><div><span>Hours logged</span><strong>${hours.length} / ${allSlots.length}</strong></div></div>
+          ${finishMode?`<div class="hour-panel-toolbar"><label class="check-field hour-override-toggle"><input type="checkbox" id="hourOverrideToggle" ${override?'checked':''}> Substitute information — edit or add hours before finishing</label><button type="button" class="link-btn" id="hourSingleEntry">Single Entry — replace with one capture</button></div>`:''}
           ${hiddenOlder>0?`<p class="field-hint" style="margin:8px 0 0">Showing the most recent 24 hours of this ${allSlots.length}-hour session. Earlier hours (${hiddenOlder}) are still counted in the totals above.</p>`:''}
           <div class="hour-row-list">${rowsHtml}</div>
           <div class="form-actions hour-panel-actions">${finishMode?`<button type="button" class="primary" id="confirmFinishSession">Confirm and Finish Session</button>`:`<button type="button" class="secondary" id="closeRealtimePanel">Close</button>`}<div id="hourPanelMsg" class="status" role="status" aria-live="polite"></div></div>`;
@@ -1495,10 +1599,14 @@ window.__guvelFinishScrapCatalog=await sb.from('scrap_catalog').select('id,code,
           modal.querySelectorAll('.status-modal-close').forEach(el=>el.addEventListener('click',refreshClose));
           modal.querySelector('#closeRealtimePanel')?.addEventListener('click',refreshClose);
           modal.querySelector('#hourOverrideToggle')?.addEventListener('change',e=>{override=e.target.checked;draw();});
+          modal.querySelector('#hourSingleEntry')?.addEventListener('click',()=>{
+            if(!confirm(`This replaces all ${hours.length} hour(s) already captured with one single entry. Continue?`))return;
+            openLegacyFinishForm(true);
+          });
           modal.querySelectorAll('[data-edit-hour]').forEach(btn=>btn.addEventListener('click',()=>{editingHour=btn.dataset.editHour;draw();
             const host=modal.querySelector(`.hour-row[data-hour="${CSS.escape(editingHour)}"] .hour-row-editor`);
             const existing=byHour.get(editingHour);
-            renderEntryEditor(host,{qty:existing?hourRowTotals(existing).qty:0,scrap:(existing?.scrap_events||[]).map(x=>({...x})),downtime:(existing?.downtime_events||[]).map(x=>({...x})),busyLabel:'Save hour',
+            renderEntryEditor(host,{qty:existing?hourRowSplit(existing).qty:0,scrap:(existing?.scrap_events||[]).map(x=>({...x})),downtime:(existing?.downtime_events||[]).map(x=>({...x})),busyLabel:'Save hour',
               onCancel:()=>{editingHour=null;draw();},
               onSave:async({qty,scrap,downtime})=>{await saveHourCapture(editingHour,existing?.id||null,qty,scrap,downtime);editingHour=null;await reload();draw();}
             });
@@ -2047,19 +2155,38 @@ async function plantOpenMachineLive(machineId,list){
     const s=entry?.s||null;
     const state=entry?.state||'idle';
     if(!s){
-      host.innerHTML=`<div class="status-modal-backdrop" data-close="1"></div><section class="plant-live-body" role="dialog" aria-modal="true" aria-labelledby="plantLiveTitle"><div class="plant-live-head"><div><div class="eyebrow">PLANT NOW · LIVE</div><h2 id="plantLiveTitle">${escapeHtml(machine.code)} — ${escapeHtml(machine.name||'Machine')}</h2></div><button type="button" class="secondary" data-close="1" aria-label="Close">✕</button></div><div class="plant-live-idle"><p>This machine has no active production session.</p><button type="button" class="primary" id="plantLiveOpenStatus">Open in Status</button></div></section>`;
+      host.innerHTML=`<div class="status-modal-backdrop" data-close="1"></div><section class="plant-live-body" role="dialog" aria-modal="true" aria-labelledby="plantLiveTitle"><div class="plant-live-head"><div><div class="eyebrow">PLANT NOW · LIVE</div><h2 id="plantLiveTitle">${escapeHtml(machine.code)} — ${escapeHtml(machine.name||'Machine')}</h2></div><button type="button" class="secondary" data-close="1" aria-label="Close">✕</button></div><div class="plant-live-idle"><p>This machine has no active production session.</p><button type="button" class="primary" id="plantLiveOpenStatus">Open in Production</button></div></section>`;
     }else{
-      const r=await sb.from('production_captures').select('id,hour_slot,production_quantity,scrap_events(quantity),downtime_events(minutes)').eq('session_id',s.id).eq('company_id',activeCompanyId).not('hour_slot','is',null).order('hour_slot');
+      const r=await sb.from('production_captures').select('id,hour_slot,production_quantity,scrap_events(quantity),downtime_events(minutes,event_type)').eq('session_id',s.id).eq('company_id',activeCompanyId).not('hour_slot','is',null).order('hour_slot');
       const hours=(r.data||[]).slice().sort((a,b)=>a.hour_slot<b.hour_slot?-1:1);
-      const totals=hours.reduce((a,h)=>{const t=plantHourRowTotals(h);a.qty+=t.qty;a.scrap+=t.scrap;a.down+=t.down;return a;},{qty:0,scrap:0,down:0});
-      const scrapPct=totals.qty?((totals.scrap/(totals.qty+totals.scrap))*100).toFixed(1):'0.0';
-      const rowsHtml=hours.map(h=>{const t=plantHourRowTotals(h);const d=new Date(h.hour_slot),pad=n=>String(n).padStart(2,'0'),e=new Date(d.getTime()+3600000);return `<div class="hour-row"><div class="hour-row-main"><strong>${pad(d.getHours())}:00 – ${pad(e.getHours())}:00</strong><span class="hour-row-stats"><b>${t.qty}</b> good<span>·</span><b class="${t.scrap?'is-scrap':''}">${t.scrap}</b> scrap<span>·</span><b class="${t.down?'is-down':''}">${t.down.toFixed(0)}</b> min down</span></div></div>`;}).join('')||'<div class="plant-live-empty">No hours logged yet with Real Time.</div>';
-      host.innerHTML=`<div class="status-modal-backdrop" data-close="1"></div><section class="plant-live-body" role="dialog" aria-modal="true" aria-labelledby="plantLiveTitle">
+      const now=new Date();
+      const slotByIso=new Map(realtimeSlotsFor(s,now).map(sl=>[sl.start.toISOString(),sl]));
+      const t=plantTargets();
+      const m=sessionOeeMetrics(s,hours,now);
+      const scrapPct=m.totals.qty?((m.totals.scrap/(m.totals.qty+m.totals.scrap))*100).toFixed(1):'0.0';
+      const rowsHtml=hours.map(h=>{const rt=hourRowSplit(h);const iso=new Date(h.hour_slot).toISOString();const slot=slotByIso.get(iso);const label=slot?slotLabel(slot):(()=>{const d=new Date(h.hour_slot),pad=n=>String(n).padStart(2,'0'),e=new Date(d.getTime()+3600000);return `${pad(d.getHours())}:${pad(d.getMinutes())} – ${pad(e.getHours())}:${pad(e.getMinutes())}`;})();
+        return `<div class="hour-row"><div class="hour-row-main"><strong>${label}</strong><span class="hour-row-stats"><b>${rt.qty}</b> good<span>·</span><b class="${rt.scrap?'is-scrap':''}">${rt.scrap}</b> scrap<span>·</span><b class="${rt.down?'is-down':''}">${rt.down.toFixed(0)}</b> min down</span></div></div>`;}).join('')||'<div class="plant-live-empty">No hours logged yet with Real Time.</div>';
+      const shiftWin=shiftWindowFor(s);
+      host.innerHTML=`<div class="status-modal-backdrop" data-close="1"></div><section class="plant-live-body plant-live-dashboard" role="dialog" aria-modal="true" aria-labelledby="plantLiveTitle">
         <div class="plant-live-head"><div><div class="eyebrow">PLANT NOW · LIVE</div><h2 id="plantLiveTitle">${escapeHtml(machine.code)} — ${escapeHtml(machine.name||'Machine')}</h2><span class="plant-live-state ${state==='run'?'is-run':state==='watch'?'is-watch':''}">${state==='idle'?'IDLE':state==='watch'?'BELOW TARGET':'RUNNING'}</span></div><button type="button" class="secondary" data-close="1" aria-label="Close">✕</button></div>
-        <div class="status-active-detail"><div><span>Customer</span><strong>${escapeHtml(s.customers?.name||'—')}</strong></div><div><span>Part Number</span><strong>${escapeHtml(s.part_numbers?.part_number||'—')}</strong></div><div><span>Operation</span><strong>${escapeHtml(s.operations?.operation_number||'—')} ${escapeHtml(s.operations?.operation_name||'')}</strong></div><div><span>Lot</span><strong>${escapeHtml(s.lot_number||'—')}</strong></div><div><span>Shift</span><strong>${escapeHtml(s.shifts?.code||'—')}</strong></div><div><span>Started</span><strong>${s.started_at?new Date(s.started_at).toLocaleString():'—'}</strong></div></div>
-        <div class="hour-totals"><div><span>Good pieces</span><strong>${totals.qty.toLocaleString()}</strong></div><div><span>Scrap</span><strong>${totals.scrap.toLocaleString()}</strong></div><div><span>Scrap rate</span><strong>${scrapPct}%</strong></div><div><span>Downtime</span><strong>${totals.down.toFixed(0)} min</strong></div><div><span>Hours logged</span><strong>${hours.length}</strong></div></div>
+        <div class="status-active-detail"><div><span>Customer</span><strong>${escapeHtml(s.customers?.name||'—')}</strong></div><div><span>Part Number</span><strong>${escapeHtml(s.part_numbers?.part_number||'—')}</strong></div><div><span>Operation</span><strong>${escapeHtml(s.operations?.operation_number||'—')} ${escapeHtml(s.operations?.operation_name||'')}</strong></div><div><span>Lot</span><strong>${escapeHtml(s.lot_number||'—')}</strong></div><div><span>Shift</span><strong>${escapeHtml(s.shifts?.code||'—')}${shiftWin?` (${formatClock(shiftWin.start)} – ${formatClock(shiftWin.end)})`:''}</strong></div><div><span>Started</span><strong>${s.started_at?new Date(s.started_at).toLocaleString():'—'}</strong></div></div>
+
+        <div class="session-oee-section">
+          <div class="session-oee-head"><h3>Session OEE</h3><span class="label">Since ${shiftWin?formatClock(new Date(Math.max(new Date(s.started_at).getTime(),shiftWin.start.getTime()))):new Date(s.started_at).toLocaleTimeString()}, live</span></div>
+          <div class="session-oee-grid">
+            ${sessionOeeRingMarkup(m,t)}
+            <div class="session-metric-pills">
+              ${sessionMetricPill('Availability',m.availability,t.availability)}
+              ${sessionMetricPill('Performance',m.performance,t.performance)}
+              ${sessionMetricPill('Quality',m.quality,t.quality)}
+            </div>
+          </div>
+          <p class="session-oee-note">On track: at or above target. Watch: within 10 points of target. Attention: more than 10 points below. Planned time counts the shift elapsed so far, minus breaks; Performance needs a configured cycle time.</p>
+        </div>
+
+        <div class="hour-totals"><div><span>Good pieces</span><strong>${m.good.toLocaleString()}</strong></div><div><span>Scrap</span><strong>${m.totals.scrap.toLocaleString()}</strong></div><div><span>Scrap rate</span><strong>${scrapPct}%</strong></div><div><span>Downtime</span><strong>${(m.totals.planned+m.totals.unplanned).toFixed(0)} min</strong></div><div><span>Hours logged</span><strong>${hours.length}</strong></div></div>
         <div class="hour-row-list">${rowsHtml}</div>
-        <div class="form-actions hour-panel-actions"><button type="button" class="secondary" id="plantLiveOpenStatus">Open in Status</button><button type="button" class="primary" data-close="1">Close</button></div>
+        <div class="form-actions hour-panel-actions"><button type="button" class="secondary" id="plantLiveOpenStatus">Open in Production</button><button type="button" class="primary" data-close="1">Close</button></div>
         <p class="plant-live-refresh">Updates automatically every 30 seconds.</p>
       </section>`;
     }
@@ -2069,7 +2196,9 @@ async function plantOpenMachineLive(machineId,list){
   host.hidden=false;document.addEventListener('keydown',onEsc);await draw();
   clearInterval(host.__timer);host.__timer=setInterval(()=>{if(!host.hidden)draw();},30000);
 }
-function plantStartLive(){if(plantLiveTimer)return;plantLiveTimer=setInterval(async()=>{const active=typeof current!=='undefined'&&current==='Dashboard'&&dashboardState.tab==='Plant Now'&&document.getElementById('dashboardPlantNow');if(!active){clearInterval(plantLiveTimer);plantLiveTimer=null;return;}if(document.hidden)return;if(document.getElementById('dashboardFilters')?.hidden===false)return;try{const r=await sb.from('machine_production_sessions').select('id,machine_id,status,started_at,shift_id,customer_id,part_number_id,operation_id,lot_number,shifts(code,name),customers(code,name),part_numbers(part_number,description),operations(operation_number,operation_name)').eq('company_id',activeCompanyId);if(!r.error){dashboardState.sessions=r.data||[];renderPlantNowDashboard();}}catch(e){console.warn('Plant Now refresh',e);}},60000);}
+
+
+function plantStartLive(){if(plantLiveTimer)return;plantLiveTimer=setInterval(async()=>{const active=typeof current!=='undefined'&&current==='Dashboard'&&dashboardState.tab==='Plant Now'&&document.getElementById('dashboardPlantNow');if(!active){clearInterval(plantLiveTimer);plantLiveTimer=null;return;}if(document.hidden)return;if(document.getElementById('dashboardFilters')?.hidden===false)return;try{const r=await sb.from('machine_production_sessions').select('id,machine_id,status,started_at,shift_id,customer_id,part_number_id,operation_id,lot_number,shifts(code,name,start_time,end_time,excluded_planned_minutes),customers(code,name),part_numbers(part_number,description),operations(operation_number,operation_name,ideal_cycle_time_seconds)').eq('company_id',activeCompanyId);if(!r.error){dashboardState.sessions=r.data||[];renderPlantNowDashboard();}}catch(e){console.warn('Plant Now refresh',e);}},60000);}
 function plantOpenTargets(){
   const t=plantTargets(),f=k=>(t[k]*100).toFixed(1).replace(/\.0$/,'');
   const ov=document.createElement('div');ov.className='dashboard-config-overlay';ov.innerHTML=`<div class="dashboard-config-dialog" role="dialog" aria-modal="true" aria-labelledby="plantTargetsTitle" style="width:min(460px,100%)"><div class="dashboard-config-head"><div><div class="eyebrow">PLANT NOW</div><h2 id="plantTargetsTitle">Targets</h2></div><button type="button" class="icon-button" data-close aria-label="Close">×</button></div><div class="dashboard-config-body"><div class="form-grid" style="grid-template-columns:1fr 1fr">${[['oee','OEE'],['availability','Availability'],['performance','Performance'],['quality','Quality']].map(([k,l])=>`<label class="field">${l} target (%)<input type="number" min="0" max="100" step="0.1" data-target="${k}" value="${f(k)}"></label>`).join('')}</div><p class="field-hint">Running machines below the OEE target are marked "Below target". Saved in this browser, like the other Dashboard settings.</p></div><div class="dashboard-config-foot"><button type="button" class="link-btn" data-reset>Reset</button><div class="actions"><button type="button" class="secondary" data-close>Cancel</button><button type="button" class="primary" data-save>Save</button></div></div></div>`;
