@@ -1,4 +1,4 @@
-> **Current release: Phase 3.2.A — Floor Kiosk (machine-locked device, badge scan, supervisor PIN).** See `docs/PHASE_3_2_A_FLOOR_KIOSK.md`. Run `sql/024_phase_3_2_A_floor_kiosk_foundation.sql` before deploying.
+> **Current release: Phase 3.2.B — Fix: gen_salt/crypt not found (pgcrypto search_path).** See `docs/PHASE_3_2_B_PGCRYPTO_FIX.md`. Run `sql/025_phase_3_2_B_pgcrypto_search_path_fix.sql` before retrying Set PIN.
 
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard
