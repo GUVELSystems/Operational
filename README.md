@@ -1,4 +1,4 @@
-> **Current release: Phase 3.1.F — Ring size, Full Screen cleanup, cursor performance, two themes only.** See `docs/PHASE_3_1_F_POLISH_PERFORMANCE_TWO_THEMES.md`.
+> **Current release: Phase 3.2.A — Floor Kiosk (machine-locked device, badge scan, supervisor PIN).** See `docs/PHASE_3_2_A_FLOOR_KIOSK.md`. Run `sql/024_phase_3_2_A_floor_kiosk_foundation.sql` before deploying.
 
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard

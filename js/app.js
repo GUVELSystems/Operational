@@ -125,6 +125,208 @@ function slotLabel(slot){return `${formatClock(slot.start)} – ${formatClock(sl
 function matchingScrapCatalog(catalog,partId,operationId){
   return (catalog||[]).filter(x=>x.part_number_id==null||(String(x.part_number_id)===String(partId)&&(!operationId||!x.operation_id||String(x.operation_id)===String(operationId))));
 }
+/* =====================================================================
+   Phase 3.2.A — Floor Kiosk mode
+   A device fixed at one machine (?kiosk=<machine code> in the URL). An operator identifies
+   themselves by scanning their badge; logging an hour is the only thing they can do here.
+   Starting/finishing a session, exiting the kiosk, or confirming an entry that looks too fast
+   for the part's cycle time all require a supervisor's individual PIN (set from Personnel).
+   ===================================================================== */
+function kioskMachineCode(){try{return new URLSearchParams(window.location.search).get('kiosk');}catch{return null;}}
+async function kioskVerifyPin(personId,pin){
+  if(!personId||!pin)return false;
+  try{const r=await sb.rpc('verify_personnel_pin',{p_person_id:personId,p_pin:pin});return !r.error&&r.data===true;}
+  catch{return false;}
+}
+/* Shared supervisor gate used by every sensitive kiosk action. */
+function kioskAskSupervisor(host,{title,body,confirmLabel='Confirm',onConfirm,onCancel}){
+  const supervisors=(kioskState.personnel||[]).filter(p=>p.role==='Supervisor'&&p.is_active);
+  host.innerHTML=`<div class="kiosk-gate"><div class="kiosk-gate-card">
+    <h2>${escapeHtml(title)}</h2><p>${escapeHtml(body)}</p>
+    <label>Supervisor<select id="kioskGateSup">${supervisors.length?supervisors.map(p=>`<option value="${p.id}">${escapeHtml(personnelFullName(p))}</option>`).join(''):'<option value="">No supervisors registered</option>'}</select></label>
+    <label>PIN<input id="kioskGatePin" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>
+    <div class="kiosk-gate-msg" id="kioskGateMsg"></div>
+    <div class="kiosk-gate-actions"><button type="button" class="secondary" id="kioskGateCancel">Cancel</button><button type="button" class="primary" id="kioskGateOk">${escapeHtml(confirmLabel)}</button></div>
+  </div></div>`;
+  document.getElementById('kioskGateCancel').onclick=()=>{onCancel?.();};
+  document.getElementById('kioskGateOk').onclick=async()=>{
+    const msg=document.getElementById('kioskGateMsg'),sel=document.getElementById('kioskGateSup'),pin=document.getElementById('kioskGatePin');
+    const btn=document.getElementById('kioskGateOk');
+    if(!sel.value){msg.textContent='No supervisor available to authorize this.';return;}
+    btn.disabled=true;btn.textContent='Checking…';
+    const ok=await kioskVerifyPin(sel.value,pin.value);
+    if(!ok){msg.textContent='Incorrect PIN.';btn.disabled=false;btn.textContent=confirmLabel;pin.value='';pin.focus();return;}
+    onConfirm(supervisors.find(p=>p.id===sel.value));
+  };
+  document.getElementById('kioskGatePin').focus();
+}
+
+let kioskState=null;
+async function renderFloorKiosk(code){
+  document.getElementById('authScreen')?.classList.add('hidden');
+  document.getElementById('app')?.classList.add('hidden');
+  document.body.classList.add('app-active');
+  let host=document.getElementById('kioskRoot');
+  if(!host){host=document.createElement('div');host.id='kioskRoot';document.body.appendChild(host);}
+  host.innerHTML='<div class="kiosk-loading">Loading machine…</div>';
+  const [mRes,pRes,scRes,dcRes,ctRes,shRes]=await Promise.all([
+    sb.from('machines').select('id,code,name').eq('company_id',activeCompanyId).eq('code',code).maybeSingle(),
+    sb.from('personnel').select('id,employee_id,first_name,last_name,role,is_active,badge_code').eq('company_id',activeCompanyId).eq('is_active',true),
+    sb.from('scrap_catalog').select('id,code,defect,part_number_id,operation_id').eq('company_id',activeCompanyId),
+    sb.from('downtime_catalog').select('id,code,downtime').eq('company_id',activeCompanyId),
+    sb.from('operation_machine_cycle_times').select('operation_id,part_number_id,machine_id,cycle_time_seconds').eq('company_id',activeCompanyId),
+    sb.from('shifts').select('id,code,name,start_time,end_time,excluded_planned_minutes').eq('company_id',activeCompanyId)
+  ]);
+  if(mRes.error||!mRes.data){host.innerHTML=`<div class="kiosk-loading"><h1>Machine not found</h1><p>No machine with code "${escapeHtml(code)}" in this company. Check the link on this device.</p></div>`;return;}
+  kioskState={machine:mRes.data,personnel:pRes.data||[],scrapCatalog:scRes.data||[],downtimeCatalog:dcRes.data||[],cycleTimes:(ctRes.data||[]).map(x=>({...x,key:`${x.part_number_id}|${x.operation_id}|${x.machine_id}`})),shifts:shRes.data||[],session:null,hours:[],operator:null,scrapLine:null,downtimeLine:null,pendingOverride:null};
+  const savedOp=sessionStorage.getItem('kiosk_operator_'+kioskState.machine.id);
+  if(savedOp){const p=kioskState.personnel.find(x=>x.id===savedOp);if(p)kioskState.operator=p;}
+  await kioskReloadSession();
+  kioskDraw();
+}
+async function kioskReloadSession(){
+  const r=await sb.from('machine_production_sessions').select('*,customers(code,name),part_numbers(part_number,description),operations(operation_number,operation_name,ideal_cycle_time_seconds),shifts(code,name,start_time,end_time,excluded_planned_minutes)').eq('company_id',activeCompanyId).eq('machine_id',kioskState.machine.id).order('started_at',{ascending:false});
+  const all=r.data||[];
+  kioskState.session=all.find(x=>['RUNNING','ACTIVE','IN_PROGRESS'].includes(String(x.status||'').toUpperCase()))||null;
+  if(kioskState.session){
+    const hr=await sb.from('production_captures').select('id,hour_slot,production_quantity,scrap_events(quantity),downtime_events(minutes,event_type)').eq('session_id',kioskState.session.id).eq('company_id',activeCompanyId).not('hour_slot','is',null).order('hour_slot');
+    kioskState.hours=(hr.data||[]).slice().sort((a,b)=>a.hour_slot<b.hour_slot?-1:1);
+  }else kioskState.hours=[];
+}
+function kioskCycleSeconds(session){
+  const key=`${session.part_number_id||''}|${session.operation_id||''}|${session.machine_id||''}`;
+  const found=(kioskState.cycleTimes||[]).find(x=>x.key===key);
+  return Number(found?.cycle_time_seconds||session.operations?.ideal_cycle_time_seconds||0)||null;
+}
+function kioskExit(){
+  const host=document.getElementById('kioskRoot');
+  kioskAskSupervisor(host,{title:'Exit Floor Kiosk',body:'A supervisor must authorize leaving this screen.',confirmLabel:'Exit',
+    onConfirm:()=>{sessionStorage.removeItem('kiosk_operator_'+kioskState.machine.id);window.location.href=window.location.pathname;},
+    onCancel:()=>kioskDraw()});
+}
+function kioskDraw(){
+  const host=document.getElementById('kioskRoot');if(!host)return;
+  const K=kioskState,m=K.machine;
+  const exitBtn=`<button type="button" class="kiosk-exit" id="kioskExitBtn">Exit</button>`;
+  if(!K.operator){
+    host.innerHTML=`<div class="kiosk-shell"><div class="kiosk-topline"><span>${escapeHtml(m.code)} — ${escapeHtml(m.name||'')}</span>${exitBtn}</div>
+      <div class="kiosk-scan"><h1>Scan your badge</h1><p>Or enter your badge code below.</p>
+        <form id="kioskScanForm"><input id="kioskScanInput" autocomplete="off" autofocus placeholder="Badge code"><button type="submit" class="primary">Continue</button></form>
+        <div class="kiosk-scan-msg" id="kioskScanMsg"></div>
+      </div></div>`;
+    document.getElementById('kioskExitBtn').onclick=kioskExit;
+    const input=document.getElementById('kioskScanInput');input.focus();
+    document.getElementById('kioskScanForm').onsubmit=e=>{
+      e.preventDefault();
+      const code=input.value.trim();const msg=document.getElementById('kioskScanMsg');
+      const person=K.personnel.find(p=>p.badge_code&&p.badge_code.toLowerCase()===code.toLowerCase());
+      if(!person){msg.textContent='Badge not recognized. Try again, or ask your supervisor.';input.value='';input.focus();return;}
+      K.operator=person;sessionStorage.setItem('kiosk_operator_'+m.id,person.id);kioskDraw();
+    };
+    return;
+  }
+  if(!K.session){
+    host.innerHTML=`<div class="kiosk-shell"><div class="kiosk-topline"><span>${escapeHtml(m.code)} — ${escapeHtml(m.name||'')}</span>${exitBtn}</div>
+      <div class="kiosk-idle"><h1>No active session</h1><p>Ask your supervisor to start production on this machine.</p>
+      <button type="button" class="secondary" id="kioskSwitchOperator">Not ${escapeHtml(personnelFullName(K.operator))}?</button>
+      <button type="button" class="primary" id="kioskStartBtn">Supervisor: Start Session</button></div></div>`;
+    document.getElementById('kioskExitBtn').onclick=kioskExit;
+    document.getElementById('kioskSwitchOperator').onclick=()=>{K.operator=null;sessionStorage.removeItem('kiosk_operator_'+m.id);kioskDraw();};
+    document.getElementById('kioskStartBtn').onclick=()=>{
+      kioskAskSupervisor(host,{title:'Start Session',body:'This opens the machine in Production so a supervisor can start it.',confirmLabel:'Continue',
+        onConfirm:()=>{window.location.href=window.location.pathname;},onCancel:kioskDraw});
+    };
+    return;
+  }
+  const s=K.session;
+  const slots=realtimeSlotsFor(s,new Date());
+  const currentSlot=slots[slots.length-1];
+  const currentIso=currentSlot?currentSlot.start.toISOString():null;
+  const existing=currentIso?K.hours.find(h=>new Date(h.hour_slot).toISOString()===currentIso):null;
+  const recent=K.hours.slice(-4).reverse();
+  const cycle=kioskCycleSeconds(s);
+  const scrapOptions=matchingScrapCatalog(K.scrapCatalog,s.part_number_id,s.operation_id);
+  host.innerHTML=`<div class="kiosk-shell"><div class="kiosk-topline"><span>${escapeHtml(m.code)} — ${escapeHtml(m.name||'')}</span><span class="kiosk-operator">${escapeHtml(personnelFullName(K.operator))} <button type="button" class="link-btn" id="kioskSwitchOperator2">Not you?</button></span>${exitBtn}</div>
+    <div class="kiosk-body">
+      <div class="kiosk-context"><div><span>Part</span><strong>${escapeHtml(s.part_numbers?.part_number||'—')}</strong></div><div><span>Operation</span><strong>${escapeHtml(s.operations?.operation_number||'—')}</strong></div><div><span>Lot</span><strong>${escapeHtml(s.lot_number||'—')}</strong></div></div>
+      <h1 class="kiosk-hour">${currentSlot?slotLabel(currentSlot):'—'}</h1>
+      <form id="kioskEntryForm" class="kiosk-entry">
+        <label class="kiosk-qty-label">Good pieces this hour<input id="kioskQty" type="number" min="0" step="1" inputmode="numeric" class="kiosk-qty-input" value="${existing?hourRowSplit(existing).qty:''}" required></label>
+        ${cycle?`<p class="kiosk-hint">Expected up to ~${Math.floor(((currentSlot.end-currentSlot.start)/1000)/cycle)} pcs this hour at the part's cycle time.</p>`:''}
+        <div class="kiosk-optional">
+          <button type="button" class="secondary" id="kioskAddScrap">${K.scrapLine?'Edit scrap':'+ Report scrap'}</button>
+          <button type="button" class="secondary" id="kioskAddDowntime">${K.downtimeLine?'Edit downtime':'+ Report downtime'}</button>
+        </div>
+        <div id="kioskScrapBox">${K.scrapLine?`<div class="kiosk-line">Scrap: ${escapeHtml((scrapOptions.find(x=>x.id===K.scrapLine.scrap_catalog_id)||{}).defect||'')} × ${K.scrapLine.quantity}</div>`:''}</div>
+        <div id="kioskDowntimeBox">${K.downtimeLine?`<div class="kiosk-line">Downtime: ${escapeHtml((K.downtimeCatalog.find(x=>x.id===K.downtimeLine.downtime_catalog_id)||{}).downtime||'')} — ${K.downtimeLine.minutes} min (${K.downtimeLine.event_type})</div>`:''}</div>
+        <div id="kioskEntryMsg" class="kiosk-msg"></div>
+        <button type="submit" class="primary kiosk-save">Save Hour</button>
+      </form>
+      ${recent.length?`<div class="kiosk-recent"><h3>Recent hours</h3>${recent.map(h=>{const t=hourRowSplit(h);const d=new Date(h.hour_slot),pad=n=>String(n).padStart(2,'0');return `<div class="kiosk-recent-row"><span>${pad(d.getHours())}:00</span><span>${t.qty} pcs</span><span>${t.scrap} scrap</span><span>${t.down.toFixed(0)} min down</span></div>`;}).join('')}</div>`:''}
+    </div>
+    <div class="kiosk-footer"><button type="button" class="link-btn" id="kioskFinishBtn">Supervisor: Finish Session</button></div>
+  </div>`;
+  document.getElementById('kioskExitBtn').onclick=kioskExit;
+  document.getElementById('kioskSwitchOperator2').onclick=()=>{K.operator=null;sessionStorage.removeItem('kiosk_operator_'+m.id);kioskDraw();};
+  document.getElementById('kioskFinishBtn').onclick=()=>{
+    kioskAskSupervisor(host,{title:'Finish Session',body:'This opens the machine in Production to review and finish the session.',confirmLabel:'Continue',
+      onConfirm:()=>{window.location.href=window.location.pathname;},onCancel:kioskDraw});
+  };
+  document.getElementById('kioskAddScrap').onclick=()=>{
+    const box=document.getElementById('kioskScrapBox');
+    box.innerHTML=`<div class="kiosk-line-form"><select id="kioskScrapCat">${scrapOptions.length?scrapOptions.map(x=>`<option value="${x.id}" ${K.scrapLine?.scrap_catalog_id===x.id?'selected':''}>${escapeHtml(x.code)}${x.part_number_id==null?' (General)':''} — ${escapeHtml(x.defect)}</option>`).join(''):'<option value="">No defects configured</option>'}</select><input id="kioskScrapQty" type="number" min="1" step="1" placeholder="Qty" value="${K.scrapLine?.quantity||''}"><button type="button" class="primary" id="kioskScrapSave">Set</button>${K.scrapLine?'<button type="button" class="link-btn danger-text" id="kioskScrapClear">Remove</button>':''}</div>`;
+    document.getElementById('kioskScrapSave').onclick=()=>{const id=document.getElementById('kioskScrapCat').value,qty=Number(document.getElementById('kioskScrapQty').value);if(!id||!qty){return;}K.scrapLine={scrap_catalog_id:id,quantity:qty,reason:null};kioskDraw();};
+    document.getElementById('kioskScrapClear')?.addEventListener('click',()=>{K.scrapLine=null;kioskDraw();});
+  };
+  document.getElementById('kioskAddDowntime').onclick=()=>{
+    const box=document.getElementById('kioskDowntimeBox');
+    box.innerHTML=`<div class="kiosk-line-form"><select id="kioskDtCat">${K.downtimeCatalog.map(x=>`<option value="${x.id}" ${K.downtimeLine?.downtime_catalog_id===x.id?'selected':''}>${escapeHtml(x.code)} — ${escapeHtml(x.downtime)}</option>`).join('')}</select><input id="kioskDtMin" type="number" min="1" step="1" placeholder="Minutes" value="${K.downtimeLine?.minutes||''}"><select id="kioskDtType"><option value="Unplanned" ${K.downtimeLine?.event_type==='Unplanned'?'selected':''}>Unplanned</option><option value="Planned" ${K.downtimeLine?.event_type==='Planned'?'selected':''}>Planned</option></select><button type="button" class="primary" id="kioskDtSave">Set</button>${K.downtimeLine?'<button type="button" class="link-btn danger-text" id="kioskDtClear">Remove</button>':''}</div>`;
+    document.getElementById('kioskDtSave').onclick=()=>{const id=document.getElementById('kioskDtCat').value,min=Number(document.getElementById('kioskDtMin').value),type=document.getElementById('kioskDtType').value;if(!id||!min){return;}K.downtimeLine={downtime_catalog_id:id,minutes:min,event_type:type,reason:null};kioskDraw();};
+    document.getElementById('kioskDtClear')?.addEventListener('click',()=>{K.downtimeLine=null;kioskDraw();});
+  };
+  document.getElementById('kioskEntryForm').onsubmit=async e=>{
+    e.preventDefault();
+    const msg=document.getElementById('kioskEntryMsg'),btn=host.querySelector('.kiosk-save');
+    const qty=Number(document.getElementById('kioskQty').value);
+    if(!Number.isInteger(qty)||qty<0){msg.textContent='Enter a whole number of good pieces.';return;}
+    const scrapQty=K.scrapLine?.quantity||0;
+    if(scrapQty>qty){msg.textContent='Scrap cannot exceed good pieces for this hour.';return;}
+    const doSave=async()=>{
+      btn.disabled=true;btn.textContent='Saving…';
+      try{
+        await kioskSaveHour(currentIso,existing?.id||null,qty,K.scrapLine?[K.scrapLine]:[],K.downtimeLine?[K.downtimeLine]:[]);
+        K.scrapLine=null;K.downtimeLine=null;
+        await kioskReloadSession();
+        msg.textContent='';kioskDraw();
+      }catch(err){msg.textContent=err.message;btn.disabled=false;btn.textContent='Save Hour';}
+    };
+    if(cycle&&currentSlot){
+      const maxPcs=((currentSlot.end-currentSlot.start)/1000)/cycle;
+      if(qty>maxPcs*1.15){
+        kioskAskSupervisor(host,{title:'Confirm high quantity',body:`${qty} pieces is above the expected pace (~${Math.floor(maxPcs)}) for this hour. A supervisor must confirm this is correct.`,confirmLabel:'Confirm and Save',
+          onConfirm:async()=>{await doSave();},onCancel:kioskDraw});
+        return;
+      }
+    }
+    await doSave();
+  };
+}
+async function kioskSaveHour(hourIso,existingId,qty,scrap,downtime){
+  const s=kioskState.session;
+  const payload={company_id:activeCompanyId,production_date:new Date(hourIso).toISOString().slice(0,10),shift_id:s.shift_id,lot_number:s.lot_number,customer_id:s.customer_id,part_number_id:s.part_number_id,machine_id:s.machine_id,operation_id:s.operation_id,operator_name:personnelFullName(kioskState.operator),supervisor_name:s.supervisor_id?(kioskState.personnel.find(p=>p.id===s.supervisor_id)?personnelFullName(kioskState.personnel.find(p=>p.id===s.supervisor_id)):null):null,production_quantity:qty,confirmed:true,confirmed_at:new Date().toISOString(),session_id:s.id,hour_slot:hourIso};
+  let captureId=existingId;
+  if(captureId){
+    const ur=await sb.from('production_captures').update(payload).eq('id',captureId).eq('company_id',activeCompanyId);if(ur.error)throw new Error('Production: '+ur.error.message);
+    await sb.from('scrap_events').delete().eq('production_capture_id',captureId).eq('company_id',activeCompanyId);
+    await sb.from('downtime_events').delete().eq('production_capture_id',captureId).eq('company_id',activeCompanyId);
+  }else{
+    const ir=await sb.from('production_captures').insert(payload).select('id').single();if(ir.error)throw new Error('Production: '+ir.error.message);
+    captureId=ir.data.id;
+  }
+  if(scrap.length){const sr=await sb.from('scrap_events').insert(scrap.map(x=>({...x,production_capture_id:captureId,company_id:activeCompanyId})));if(sr.error)throw new Error('Scrap: '+sr.error.message);}
+  if(downtime.length){const dr=await sb.from('downtime_events').insert(downtime.map(x=>({...x,production_capture_id:captureId,company_id:activeCompanyId})));if(dr.error)throw new Error('Downtime: '+dr.error.message);}
+}
+
 function hourRowSplit(row){
   const scrap=(row.scrap_events||[]).reduce((a,x)=>a+(x.quantity||0),0);
   let planned=0,unplanned=0;
@@ -1414,6 +1616,8 @@ async function bootstrapSession(){
   try{
     const membership=await loadMembership();
     if(!membership){showCompanySetup();return;}
+    const kioskCode=kioskMachineCode();
+    if(kioskCode){await renderFloorKiosk(kioskCode);return;}
     showApp(); renderNav(); render();
   }catch(e){showAuth(e.message||'Unable to load your company access.');}
 }
@@ -1447,7 +1651,7 @@ let personnelCache=[];
 
 async function loadPersonnel(){
   const {data,error}=await sb.from('personnel')
-    .select('id,company_id,employee_id,first_name,last_name,role,is_active,created_at')
+    .select('id,company_id,employee_id,first_name,last_name,role,is_active,badge_code,created_at')
     .eq('company_id',activeCompanyId).order('last_name').order('first_name');
   if(error){console.error(error);alert(error.message);return [];}
   personnelCache=data||[];
@@ -1463,17 +1667,20 @@ async function renderPersonnelPage(){
     <button class="primary" id="addPersonnelBtn" type="button">Add Personnel</button></section>
     <div id="personnelFormHost"></div>
     <div class="table-wrap"><table><thead><tr>
-      <th>Employee ID</th><th>Name</th><th>Last Name</th><th>Role</th><th>Status</th><th>Actions</th>
+      <th>Employee ID</th><th>Name</th><th>Last Name</th><th>Role</th><th>Badge</th><th>PIN</th><th>Status</th><th>Actions</th>
     </tr></thead><tbody>${personnelCache.map(p=>`<tr>
       <td>${escapeHtml(p.employee_id)}</td><td>${escapeHtml(p.first_name)}</td>
       <td>${escapeHtml(p.last_name)}</td><td>${escapeHtml(p.role)}</td>
+      <td>${escapeHtml(p.badge_code||'—')}</td>
+      <td>${p.role==='Supervisor'?`<button class="secondary setPersonnelPin" data-id="${p.id}" data-name="${escapeHtml(personnelFullName(p))}">Set PIN</button>`:'<span class="muted">—</span>'}</td>
       <td>${p.is_active?'Active':'Inactive'}</td>
       <td><button class="secondary editPersonnel" data-id="${p.id}">Edit</button>
       <button class="secondary deletePersonnel" data-id="${p.id}">Delete</button></td>
-    </tr>`).join('')||'<tr><td colspan="6">No personnel registered.</td></tr>'}</tbody></table></div>`;
+    </tr>`).join('')||'<tr><td colspan="8">No personnel registered.</td></tr>'}</tbody></table></div>`;
   document.getElementById('addPersonnelBtn').onclick=()=>showPersonnelForm();
   document.querySelectorAll('.editPersonnel').forEach(b=>b.onclick=()=>showPersonnelForm(personnelCache.find(x=>x.id===b.dataset.id)));
   document.querySelectorAll('.deletePersonnel').forEach(b=>b.onclick=()=>deletePersonnel(b.dataset.id));
+  document.querySelectorAll('.setPersonnelPin').forEach(b=>b.onclick=()=>showSetPinForm(b.dataset.id,b.dataset.name));
 }
 function showPersonnelForm(record=null){
   const host=document.getElementById('personnelFormHost'); if(!host)return;
@@ -1483,6 +1690,7 @@ function showPersonnelForm(record=null){
       <label>Name<input id="p17_first_name" value="${record?escapeHtml(record.first_name):''}" required></label>
       <label>Last Name<input id="p17_last_name" value="${record?escapeHtml(record.last_name):''}" required></label>
       <label>Role<select id="p17_role"><option value="Operator" ${record?.role==='Operator'?'selected':''}>Operator</option><option value="Supervisor" ${record?.role==='Supervisor'?'selected':''}>Supervisor</option></select></label>
+      <label>Badge Code <span class="field-hint">(Floor Kiosk — scanned or typed)</span><input id="p17_badge_code" value="${record?escapeHtml(record.badge_code||''):''}" placeholder="e.g. EMP-0231"></label>
     </div>
     <div class="form-actions"><button class="primary" id="savePersonnelBtn">Save Personnel</button>
     <button class="secondary" id="cancelPersonnelBtn">Cancel</button></div></div>`;
@@ -1492,7 +1700,8 @@ function showPersonnelForm(record=null){
       employee_id:document.getElementById('p17_employee_id').value.trim(),
       first_name:document.getElementById('p17_first_name').value.trim(),
       last_name:document.getElementById('p17_last_name').value.trim(),
-      role:document.getElementById('p17_role').value,is_active:true};
+      role:document.getElementById('p17_role').value,is_active:true,
+      badge_code:document.getElementById('p17_badge_code').value.trim()||null};
     if(!payload.employee_id||!payload.first_name||!payload.last_name){alert('Employee ID, Name and Last Name are required.');return;}
     let q=record?sb.from('personnel').update(payload).eq('id',record.id):sb.from('personnel').insert(payload);
     const {error}=await q;if(error){alert(error.message);return;}await renderPersonnelPage();
@@ -1502,6 +1711,27 @@ async function deletePersonnel(id){
   if(!confirm('Delete this personnel record?'))return;
   const {error}=await sb.from('personnel').delete().eq('id',id);
   if(error){alert(error.message);return;}await renderPersonnelPage();
+}
+/* Phase 3.2.A — a Supervisor's PIN authorizes sensitive Floor Kiosk actions (starting/finishing
+   a session, exiting the kiosk, confirming a too-fast entry). Set here; verified via RPC and
+   never read back — see set_personnel_pin/verify_personnel_pin in the migration. */
+function showSetPinForm(personId,personName){
+  const host=document.getElementById('personnelFormHost');if(!host)return;
+  host.innerHTML=`<div class="panel phase17-form"><h3>Set PIN — ${escapeHtml(personName)}</h3><p class="label">4 to 8 digits. Used to authorize Floor Kiosk actions for this supervisor.</p>
+    <div class="form-grid">
+      <label>New PIN<input id="pinNew" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off"></label>
+      <label>Confirm PIN<input id="pinConfirm" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off"></label>
+    </div>
+    <div class="form-actions"><button class="primary" id="savePinBtn">Save PIN</button><button class="secondary" id="cancelPinBtn">Cancel</button><div id="pinMsg" class="status"></div></div></div>`;
+  document.getElementById('cancelPinBtn').onclick=()=>host.innerHTML='';
+  document.getElementById('savePinBtn').onclick=async()=>{
+    const msg=document.getElementById('pinMsg'),a=document.getElementById('pinNew').value,b=document.getElementById('pinConfirm').value;
+    if(!/^\d{4,8}$/.test(a)){msg.textContent='PIN must be 4 to 8 digits.';msg.className='status error';return;}
+    if(a!==b){msg.textContent='PINs do not match.';msg.className='status error';return;}
+    const {error}=await sb.rpc('set_personnel_pin',{p_person_id:personId,p_pin:a});
+    if(error){msg.textContent=error.message;msg.className='status error';return;}
+    host.innerHTML='';
+  };
 }
 function personnelOptions(role, selected=''){
   return personnelCache.filter(p=>p.is_active&&p.role===role)

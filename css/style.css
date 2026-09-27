@@ -838,3 +838,53 @@ body.status-modal-open,.status-modal-open{overflow:hidden}
 .session-oee-note{margin-top:12px;font-size:12px;color:var(--text-3)}
 .hour-panel-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
 @media (max-width:640px){.session-oee-grid{grid-template-columns:1fr}.session-oee-visual{margin:0 auto}.plant-live-dashboard .status-active-detail{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* ---------- 27. Floor Kiosk (Phase 3.2.A) ---------- */
+#kioskRoot{position:fixed;inset:0;z-index:3000;background:var(--bg);overflow-y:auto}
+.kiosk-loading{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--text-2)}
+.kiosk-shell{min-height:100vh;display:flex;flex-direction:column}
+.kiosk-topline{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;background:var(--navy);color:var(--ice);font-family:var(--fig);font-weight:600;font-size:18px}
+.kiosk-operator{display:flex;align-items:center;gap:10px;font-family:var(--sans);font-weight:500;font-size:15px;color:#A9BACB}
+.kiosk-operator .link-btn{color:var(--cyan);font-size:13px}
+.kiosk-exit{min-height:40px;padding:0 16px;background:transparent;border:1px solid #2F4463;color:#EAF2F8;font-weight:600}
+.kiosk-exit:hover{background:rgba(234,242,248,.1)}
+.kiosk-scan,.kiosk-idle{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:14px;padding:32px}
+.kiosk-scan h1,.kiosk-idle h1{font-size:32px}
+.kiosk-scan p,.kiosk-idle p{color:var(--text-2);font-size:17px;max-width:46ch}
+#kioskScanForm{display:flex;gap:10px;margin-top:10px;width:min(420px,100%)}
+#kioskScanInput{min-height:56px;font-size:22px;text-align:center;letter-spacing:.04em}
+.kiosk-scan .primary{min-height:56px;padding:0 24px;font-size:18px}
+.kiosk-scan-msg{min-height:20px;color:var(--stop-ink);font-size:15px}
+.kiosk-idle .primary,.kiosk-idle .secondary{min-height:52px;padding:0 22px;font-size:17px}
+.kiosk-body{flex:1;max-width:640px;width:100%;margin:0 auto;padding:24px 20px 20px;display:flex;flex-direction:column;gap:16px}
+.kiosk-context{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line)}
+.kiosk-context>div{background:var(--surface);padding:12px;text-align:center}
+.kiosk-context span{display:block;font-size:12px;color:var(--text-3)}
+.kiosk-context strong{display:block;font-size:16px;margin-top:2px}
+.kiosk-hour{text-align:center;font-family:var(--fig);font-weight:600;font-size:34px;margin:4px 0}
+.kiosk-entry{display:flex;flex-direction:column;gap:14px;background:var(--surface);padding:22px;border:1px solid var(--line)}
+.kiosk-qty-label{font-size:15px;font-weight:600;color:var(--text-2);display:flex;flex-direction:column;gap:8px}
+.kiosk-qty-input{min-height:72px;font-size:40px;text-align:center;font-family:var(--fig);font-weight:600}
+.kiosk-hint{text-align:center;font-size:13px;color:var(--text-3);margin:0}
+.kiosk-optional{display:flex;gap:10px}
+.kiosk-optional button{flex:1;min-height:52px;font-size:15px}
+.kiosk-line{padding:8px 12px;background:var(--surface-2);font-size:14px}
+.kiosk-line-form{display:flex;flex-wrap:wrap;gap:8px;padding:10px;background:var(--surface-2)}
+.kiosk-line-form select,.kiosk-line-form input{min-height:44px}
+.kiosk-msg{min-height:18px;color:var(--stop-ink);font-size:14px;text-align:center}
+.kiosk-save{min-height:60px;font-size:19px}
+.kiosk-recent{margin-top:4px}
+.kiosk-recent h3{font-size:14px;color:var(--text-2);margin-bottom:8px}
+.kiosk-recent-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:8px 12px;font-size:14px;border-top:1px solid var(--line-soft)}
+.kiosk-recent-row:first-child{border-top:0}
+.kiosk-footer{text-align:center;padding:16px}
+.kiosk-gate{position:fixed;inset:0;z-index:3100;background:rgba(15,27,45,.72);display:flex;align-items:center;justify-content:center;padding:20px}
+.kiosk-gate-card{width:min(400px,100%);background:var(--surface);padding:26px 24px;box-shadow:var(--shadow-float)}
+.kiosk-gate-card h2{font-size:20px;margin-bottom:8px}
+.kiosk-gate-card p{color:var(--text-2);font-size:15px;margin-bottom:16px}
+.kiosk-gate-card label{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:600;color:var(--text-2);margin-bottom:14px}
+.kiosk-gate-card select,.kiosk-gate-card input{min-height:48px;font-size:17px}
+.kiosk-gate-msg{min-height:18px;color:var(--stop-ink);font-size:14px;margin-bottom:6px}
+.kiosk-gate-actions{display:flex;gap:10px;justify-content:flex-end}
+.kiosk-gate-actions button{min-height:48px;font-size:16px}
+@media (max-width:520px){.kiosk-context{grid-template-columns:1fr}.kiosk-recent-row{grid-template-columns:repeat(2,1fr)}}
