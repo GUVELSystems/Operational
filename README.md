@@ -1,4 +1,4 @@
-> **Current release: Phase 3.1.C — Full-screen machine dashboard, one register per session, corrected session OEE, faster Production, editable/General defects.** See `docs/PHASE_3_1_C_FULLSCREEN_CONSOLIDATION_GENERAL_DEFECTS.md`. Run `sql/023_phase_3_1_C_general_scrap_defects.sql` before deploying.
+> **Current release: Phase 3.1.D — Session OEE ring redesigned; Operator/Supervisor shown and saved.** See `docs/PHASE_3_1_D_OEE_VISUAL_OPERATOR_SUPERVISOR.md`.
 
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard
