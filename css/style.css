@@ -779,11 +779,14 @@ body.status-modal-open,.status-modal-open{overflow:hidden}
 .hour-panel-actions{margin-top:14px}
 @media (max-width:640px){.hour-totals{grid-template-columns:repeat(2,minmax(0,1fr))}.hour-row-main{flex-direction:column;align-items:flex-start;gap:4px}}
 
-/* ---------- 25. Plant Now live machine panel (Phase 3.1.A) ---------- */
-.plant-live-modal{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px}
-.plant-live-body{position:relative;z-index:1;width:min(620px,100%);max-height:calc(100vh - 40px);overflow:auto;background:var(--surface);box-shadow:var(--shadow-float);padding:22px 24px;clip-path:polygon(0 0,calc(100% - 20px) 0,100% 12px,100% 100%,0 100%)}
-.plant-live-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--line-soft)}
-.plant-live-head h2{font-size:20px}
+/* ---------- 25. Plant Now live machine panel (Phase 3.1.C) ----------
+   A dedicated full-screen dashboard for one machine, not a small popup card. */
+.plant-live-modal{position:fixed;inset:0;z-index:1000;background:var(--bg);overflow-y:auto;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.plant-live-modal .status-modal-backdrop{display:none}
+.plant-live-body{position:relative;width:100%;max-width:1100px;margin:0 auto;padding:22px 24px 48px}
+.plant-live-head{position:sticky;top:0;z-index:2;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:14px 0;margin-bottom:14px;border-bottom:1px solid var(--line-soft);background:var(--bg)}
+.plant-live-head h2{font-size:24px}
+.plant-live-head-actions{display:flex;gap:8px;flex:none}
 .plant-live-state{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;letter-spacing:.06em;padding:3px 9px;border:1px solid var(--line);color:var(--text-2)}
 .plant-live-state::before{content:"";width:10px;height:11px;background:var(--idle);clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%)}
 .plant-live-state.is-run{color:var(--flow-ink);border-color:var(--flow)}
@@ -796,8 +799,9 @@ body.status-modal-open,.status-modal-open{overflow:hidden}
 .plant-live-refresh{font-size:12px;color:var(--text-3);margin-top:10px}
 
 /* ---------- 26. Session OEE (Phase 3.1.B) ---------- */
-.plant-live-dashboard{width:min(720px,100%)}
 .plant-live-dashboard .status-active-detail{grid-template-columns:repeat(3,minmax(0,1fr))}
+.plant-live-dashboard .session-metric-pills{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:900px){.plant-live-dashboard .session-metric-pills{grid-template-columns:1fr}}
 .session-oee-section{margin:16px 0;padding:16px 0;border-top:1px solid var(--line-soft);border-bottom:1px solid var(--line-soft)}
 .session-oee-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px}
 .session-oee-head h3{font-size:16px}

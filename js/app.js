@@ -119,6 +119,12 @@ function realtimeSlotsFor(session,now){
 }
 function formatClock(d){const pad=n=>String(n).padStart(2,'0');return `${pad(d.getHours())}:${pad(d.getMinutes())}`;}
 function slotLabel(slot){return `${formatClock(slot.start)} – ${formatClock(slot.end)}`;}
+/* Phase 3.1.C — a defect applies if it's specific to this Part Number (and Operation, when set),
+   or if it's General (part_number_id null), which applies to every Part Number including ones
+   added after the defect was created. */
+function matchingScrapCatalog(catalog,partId,operationId){
+  return (catalog||[]).filter(x=>x.part_number_id==null||(String(x.part_number_id)===String(partId)&&(!operationId||!x.operation_id||String(x.operation_id)===String(operationId))));
+}
 function hourRowSplit(row){
   const scrap=(row.scrap_events||[]).reduce((a,x)=>a+(x.quantity||0),0);
   let planned=0,unplanned=0;
@@ -138,20 +144,22 @@ function sessionCycleSeconds(session){
    to that same fraction. This is what lets the numbers move as the shift progresses instead of
    starting deep in the red on the shift's first hour. */
 function sessionOeeMetrics(session,hours,now){
+  /* Phase 3.1.C: Planned Production Time is the total duration of the hours actually LOGGED
+     (each at its real length — a shift's odd final slot may be 30 minutes, not 60), not wall-clock
+     time elapsed since the shift started. Two hours captured means OEE is measured against those
+     two hours, whether they were captured back to back or hours apart — matching how the
+     Production dashboard measures a finished period, and avoiding any dependency on the clock. */
   const nowD=now||new Date();
-  const win=shiftWindowFor(session);
-  const totals=hours.reduce((a,h)=>{const t=hourRowSplit(h);a.qty+=t.qty;a.scrap+=t.scrap;a.planned+=t.plannedDown;a.unplanned+=t.unplannedDown;return a;},{qty:0,scrap:0,planned:0,unplanned:0});
+  const durByIso=new Map(realtimeSlotsFor(session,nowD).map(sl=>[sl.start.toISOString(),(sl.end-sl.start)/60000]));
+  const totals=hours.reduce((a,h)=>{
+    const t=hourRowSplit(h);
+    const iso=new Date(h.hour_slot).toISOString();
+    const dur=durByIso.has(iso)?durByIso.get(iso):60;
+    a.qty+=t.qty;a.scrap+=t.scrap;a.planned+=t.plannedDown;a.unplanned+=t.unplannedDown;a.loggedMin+=dur;
+    return a;
+  },{qty:0,scrap:0,planned:0,unplanned:0,loggedMin:0});
   const good=Math.max(0,totals.qty-totals.scrap);
-  let plannedMin=null;
-  if(win){
-    const clampEnd=new Date(Math.min(nowD.getTime(),win.end.getTime()));
-    const clampStart=new Date(Math.max(new Date(session.started_at).getTime(),win.start.getTime()));
-    const elapsedMin=Math.max(0,(clampEnd-clampStart)/60000);
-    const shiftTotalMin=(win.end-win.start)/60000;
-    const excluded=Number(session.shifts?.excluded_planned_minutes||0);
-    const excludedProrated=shiftTotalMin>0?excluded*Math.min(1,elapsedMin/shiftTotalMin):0;
-    plannedMin=Math.max(0,elapsedMin-excludedProrated);
-  }
+  const plannedMin=hours.length?Math.max(0,totals.loggedMin-totals.planned):null;
   const operatingMin=plannedMin==null?null:Math.max(0,plannedMin-totals.unplanned);
   const availability=(plannedMin!=null&&plannedMin>0)?Math.min(1,Math.max(0,operatingMin/plannedMin)):null;
   const cycle=sessionCycleSeconds(session);
@@ -159,6 +167,32 @@ function sessionOeeMetrics(session,hours,now){
   const quality=totals.qty>0?Math.min(1,Math.max(0,good/totals.qty)):null;
   const oee=(availability!=null&&performance!=null&&quality!=null)?Math.min(1,Math.max(0,availability*performance*quality)):null;
   return {totals,good,plannedMin,operatingMin,availability,performance,quality,oee};
+}
+/* Phase 3.1.C — at Finish Session, the hour-by-hour rows used for Real Time were only ever a
+   live working buffer: the permanent record (Registers, history) should be one entry per session,
+   with its production total and every scrap/downtime line item that was captured along the way.
+   This folds every hourly production_captures row for the session into one, re-pointing their
+   scrap_events/downtime_events to the new row, then deletes the hourly rows. Safe to call even
+   when there are no hourly rows (nothing to do). */
+async function consolidateSessionHours(session){
+  const r=await sb.from('production_captures').select('id,hour_slot,production_date,production_quantity').eq('session_id',session.id).eq('company_id',activeCompanyId).not('hour_slot','is',null).order('hour_slot');
+  if(r.error)throw new Error('Finish Session: '+r.error.message);
+  const rows=r.data||[];
+  if(!rows.length)return null;
+  const totalQty=rows.reduce((a,x)=>a+(x.production_quantity||0),0);
+  const productionDate=rows[rows.length-1].production_date||new Date().toISOString().slice(0,10);
+  const payload={company_id:activeCompanyId,production_date:productionDate,shift_id:session.shift_id,lot_number:session.lot_number,customer_id:session.customer_id,part_number_id:session.part_number_id,machine_id:session.machine_id,operation_id:session.operation_id,operator_name:null,supervisor_name:null,production_quantity:totalQty,confirmed:true,confirmed_at:new Date().toISOString(),session_id:session.id,hour_slot:null};
+  const ins=await sb.from('production_captures').insert(payload).select('id').single();
+  if(ins.error)throw new Error('Finish Session: '+ins.error.message);
+  const newId=ins.data.id;
+  const ids=rows.map(x=>x.id);
+  const su=await sb.from('scrap_events').update({production_capture_id:newId}).in('production_capture_id',ids).eq('company_id',activeCompanyId);
+  if(su.error)throw new Error('Finish Session: '+su.error.message);
+  const du=await sb.from('downtime_events').update({production_capture_id:newId}).in('production_capture_id',ids).eq('company_id',activeCompanyId);
+  if(du.error)throw new Error('Finish Session: '+du.error.message);
+  const dr=await sb.from('production_captures').delete().in('id',ids).eq('company_id',activeCompanyId);
+  if(dr.error)throw new Error('Finish Session: '+dr.error.message);
+  return newId;
 }
 /* Color scale: on target is "good"; within 10 points below target is "watch"; further is "bad".
    Used consistently for the OEE ring, the four metric pills and Plant Now's hexagons. */
@@ -863,10 +897,51 @@ async function loadPnProfileCycles(partId){
  document.getElementById('pnpCycleForm').onsubmit=async e=>{e.preventDefault();const payload={company_id:activeCompanyId,part_number_id:partId,operation_id:document.getElementById('pnpCycleOp').value,machine_id:document.getElementById('pnpCycleMachine').value,cycle_time_seconds:Number(document.getElementById('pnpCycleTime').value)};const r=await sb.from('operation_machine_cycle_times').upsert(payload,{onConflict:'operation_id,machine_id'});if(r.error){document.getElementById('pnpCycleMsg').textContent=r.error.message;return;}await loadPnProfileCycles(partId);};
  document.querySelectorAll('.pnpDelCycle').forEach(b=>b.onclick=async()=>{if(!confirm('Delete cycle time?'))return;const r=await sb.from('operation_machine_cycle_times').delete().eq('id',b.dataset.id).eq('company_id',activeCompanyId);if(r.error)return alert(r.error.message);await loadPnProfileCycles(partId);});
 }
+/* Phase 3.1.C — Defects can now be added directly from the Part Number profile, not only from
+   Catalog. A defect saved here is specific to this Part Number + Operation, same as one saved
+   from Catalog; General defects (Catalog → Defects → General) still show up here automatically
+   since they apply to every Part Number. */
 async function loadPnProfileDefects(partId){
  const box=document.getElementById('pnTabDefects');if(!box)return;
- const {data,error}=await sb.from('scrap_catalog').select('code,defect,category,operations(operation_number,operation_name)').eq('company_id',activeCompanyId).eq('part_number_id',partId).order('code');
- box.innerHTML=`<div class="panel section"><h3>Defects</h3><p>Read-only view of defects already managed in Catalog.</p><div class="table-wrap"><table><thead><tr><th>Operation</th><th>Code</th><th>Defect</th><th>Category</th></tr></thead><tbody>${error?`<tr><td colspan="4">${escapeHtml(error.message)}</td></tr>`:(data||[]).map(d=>`<tr><td>${escapeHtml(d.operations?.operation_number||'')} — ${escapeHtml(d.operations?.operation_name||'')}</td><td>${escapeHtml(d.code)}</td><td>${escapeHtml(d.defect)}</td><td>${escapeHtml(d.category)}</td></tr>`).join('')||'<tr><td colspan="4">No defects registered for this Part Number.</td></tr>'}</tbody></table></div></div>`;
+ box.innerHTML='<div class="panel section"><p class="muted">Loading defects…</p></div>';
+ const [ownRes,genRes,opsRes]=await Promise.all([
+   sb.from('scrap_catalog').select('id,code,defect,category,operation_id,operations(operation_number,operation_name)').eq('company_id',activeCompanyId).eq('part_number_id',partId).order('code'),
+   sb.from('scrap_catalog').select('id,code,defect,category').eq('company_id',activeCompanyId).is('part_number_id',null).order('code'),
+   sb.from('operations').select('id,operation_number,operation_name').eq('company_id',activeCompanyId).eq('part_number_id',partId).order('operation_number')
+ ]);
+ const error=ownRes.error||genRes.error;
+ const own=(ownRes.data||[]).map(d=>({...d,general:false}));
+ const general=(genRes.data||[]).map(d=>({...d,general:true}));
+ const rows=[...own,...general];
+ const ops=opsRes.data||[];
+ const opOptions=ops.map(o=>`<option value="${o.id}">${escapeHtml(o.operation_number)}${o.operation_name?' — '+escapeHtml(o.operation_name):''}</option>`).join('');
+ box.innerHTML=`<div class="panel section">
+   <div class="section-title"><div><h3>Defects</h3><p>Specific to this Part Number, plus any General defect from Catalog.</p></div></div>
+   <form id="pnDefectForm" class="form-grid" style="margin-bottom:16px">
+     <div class="field"><label>Operation *</label><select id="pnDefectOperation" ${ops.length?'':'disabled'} required><option value="">${ops.length?'Select Operation':'No operations for this Part Number'}</option>${opOptions}</select></div>
+     <div class="field"><label>Code *</label><input id="pnDefectCode" required maxlength="80"></div>
+     <div class="field"><label>Defect *</label><input id="pnDefectName" required maxlength="200"></div>
+     <div class="field"><label>Category *</label><select id="pnDefectCategory" required><option value="">Select</option><option>Dimensional</option><option>Visual</option><option>Material</option><option>Process</option></select></div>
+     <div class="form-actions"><button class="primary" type="submit" ${ops.length?'':'disabled'}>Add Defect</button><div id="pnDefectMsg" class="status"></div></div>
+   </form>
+   <div class="table-wrap"><table><thead><tr><th>Operation</th><th>Code</th><th>Defect</th><th>Category</th><th>Actions</th></tr></thead><tbody>${error?`<tr><td colspan="5">${escapeHtml(error.message)}</td></tr>`:rows.map(d=>`<tr><td>${d.general?'<span class="label">General (all Part Numbers)</span>':escapeHtml(d.operations?.operation_number||'')+(d.operations?.operation_name?' — '+escapeHtml(d.operations.operation_name):'')}</td><td>${escapeHtml(d.code)}</td><td>${escapeHtml(d.defect)}</td><td>${escapeHtml(d.category)}</td><td>${d.general?'<span class="muted">Edit in Catalog</span>':`<button class="danger pnDefectDelete" data-id="${d.id}">Delete</button>`}</td></tr>`).join('')||'<tr><td colspan="5">No defects registered for this Part Number.</td></tr>'}</tbody></table></div>
+ </div>`;
+ box.querySelector('#pnDefectForm').onsubmit=async e=>{
+   e.preventDefault();
+   const msg=box.querySelector('#pnDefectMsg');
+   const operation_id=box.querySelector('#pnDefectOperation').value,code=box.querySelector('#pnDefectCode').value.trim(),defect=box.querySelector('#pnDefectName').value.trim(),category=box.querySelector('#pnDefectCategory').value;
+   if(!operation_id||!code||!defect||!category){msg.textContent='Complete all required fields.';msg.className='status error';return;}
+   const {error:saveError}=await sb.from('scrap_catalog').insert({company_id:activeCompanyId,part_number_id:partId,operation_id,code,defect,category});
+   if(saveError){msg.textContent=saveError.message;msg.className='status error';return;}
+   msg.textContent='Defect saved successfully.';msg.className='status success';
+   await loadPnProfileDefects(partId);
+ };
+ box.querySelectorAll('.pnDefectDelete').forEach(b=>b.onclick=async()=>{
+   if(!confirm('Delete this defect?'))return;
+   const {error:delError}=await sb.from('scrap_catalog').delete().eq('id',b.dataset.id).eq('company_id',activeCompanyId);
+   if(delError){alert(delError.message);return;}
+   await loadPnProfileDefects(partId);
+ });
 }
 
 function closeMachineProfile(){
@@ -1152,6 +1227,7 @@ return head('Catalog','Manage Scrap Catalog and Downtime Catalog using the recon
 <div class="panel section">
 <div class="section-title"><div><h2 id="scrapTitle">Add Scrap Defect</h2><p>Defects are tied to the selected Part Number and its Operations.</p></div><button id="cancelScrap" class="secondary" style="display:none">Cancel Edit</button></div>
 <form id="scrapForm"><div class="form-grid">
+<div class="field" style="grid-column:1/-1"><label class="check-field"><input type="checkbox" id="scrapGeneral"> General — applies to every Part Number, including new ones added later (ignores Operation)</label></div>
 <div class="field"><label>Part Number *</label><select id="scrapPartNumber" required></select></div>
 <div class="field"><label>Operation *</label><select id="scrapOperation" required disabled><option value="">Select Part Number first</option></select></div>
 <div class="field"><label>Code *</label><input id="scrapCode" required maxlength="80"></div>
@@ -1198,20 +1274,32 @@ async function loadScrap(){
  const {data,error}=await sb.from('scrap_catalog').select('id,part_number_id,operation_id,code,defect,category,part_numbers(part_number),operations(operation_number,operation_name)').eq('company_id',activeCompanyId).order('code');
  if(error){body.innerHTML=`<tr><td colspan="6">Error: ${escapeHtml(error.message)}</td></tr>`;return;}
  scrapRows=data||[];
- body.innerHTML=scrapRows.length?scrapRows.map(s=>`<tr><td>${escapeHtml(s.part_numbers?.part_number||'—')}</td><td>${escapeHtml(s.operations?.operation_number||'—')}${s.operations?.operation_name?' — '+escapeHtml(s.operations.operation_name):''}</td><td>${escapeHtml(s.code)}</td><td>${escapeHtml(s.defect)}</td><td>${escapeHtml(s.category)}</td><td><button class="secondary editScrap" data-id="${s.id}">Edit</button> <button class="danger deleteScrap" data-id="${s.id}">Delete</button></td></tr>`).join(''):'<tr><td colspan="6">No defects registered.</td></tr>';
+ body.innerHTML=scrapRows.length?scrapRows.map(s=>`<tr>${s.part_number_id==null?'<td colspan="2"><span class="label">General — all Part Numbers</span></td>':`<td>${escapeHtml(s.part_numbers?.part_number||'—')}</td><td>${escapeHtml(s.operations?.operation_number||'—')}${s.operations?.operation_name?' — '+escapeHtml(s.operations.operation_name):''}</td>`}<td>${escapeHtml(s.code)}</td><td>${escapeHtml(s.defect)}</td><td>${escapeHtml(s.category)}</td><td><button class="secondary editScrap" data-id="${s.id}">Edit</button> <button class="danger deleteScrap" data-id="${s.id}">Delete</button></td></tr>`).join(''):'<tr><td colspan="6">No defects registered.</td></tr>';
  document.querySelectorAll('.editScrap').forEach(b=>b.onclick=()=>editScrap(scrapRows.find(x=>x.id===b.dataset.id)));
  document.querySelectorAll('.deleteScrap').forEach(b=>b.onclick=()=>deleteScrap(b.dataset.id));
 }
 async function editScrap(s){
- scrapEdit=s.id;await loadPNSelect('scrapPartNumber');document.getElementById('scrapPartNumber').value=s.part_number_id;
- await loadScrapOperations(s.part_number_id,s.operation_id);
+ scrapEdit=s.id;await loadPNSelect('scrapPartNumber');
+ const isGeneral=s.part_number_id==null;
+ document.getElementById('scrapGeneral').checked=isGeneral;applyScrapGeneralMode(isGeneral);
+ if(!isGeneral){document.getElementById('scrapPartNumber').value=s.part_number_id;await loadScrapOperations(s.part_number_id,s.operation_id);}
  document.getElementById('scrapCode').value=s.code;document.getElementById('scrapDefect').value=s.defect;document.getElementById('scrapCategory').value=s.category;
  document.getElementById('scrapTitle').textContent='Edit Scrap Defect';document.getElementById('cancelScrap').style.display='inline-block';
 }
-async function resetScrap(){scrapEdit=null;document.getElementById('scrapForm').reset();document.getElementById('scrapTitle').textContent='Add Scrap Defect';document.getElementById('cancelScrap').style.display='none';await loadPNSelect('scrapPartNumber');await loadScrapOperations('');catStatus('scrapMessage','');}
+async function resetScrap(){scrapEdit=null;document.getElementById('scrapForm').reset();applyScrapGeneralMode(false);document.getElementById('scrapTitle').textContent='Add Scrap Defect';document.getElementById('cancelScrap').style.display='none';await loadPNSelect('scrapPartNumber');await loadScrapOperations('');catStatus('scrapMessage','');}
+/* Phase 3.1.C — General mode: Part Number and Operation are ignored (saved as null) and the
+   defect then applies to every Part Number, current and future. */
+function applyScrapGeneralMode(isGeneral){
+  const pnEl=document.getElementById('scrapPartNumber'),opEl=document.getElementById('scrapOperation');
+  pnEl.disabled=isGeneral;opEl.disabled=isGeneral||!pnEl.value;
+  pnEl.required=!isGeneral;opEl.required=!isGeneral;
+  if(isGeneral){pnEl.value='';opEl.innerHTML='<option value="">Not applicable — General</option>';}
+}
 async function saveScrap(e){
- e.preventDefault();const part_number_id=document.getElementById('scrapPartNumber').value,operation_id=document.getElementById('scrapOperation').value,code=document.getElementById('scrapCode').value.trim(),defect=document.getElementById('scrapDefect').value.trim(),category=document.getElementById('scrapCategory').value;
- if(!part_number_id||!operation_id||!code||!defect||!category)return catStatus('scrapMessage','Complete all required fields.','error');
+ e.preventDefault();
+ const isGeneral=document.getElementById('scrapGeneral').checked;
+ const part_number_id=isGeneral?null:document.getElementById('scrapPartNumber').value,operation_id=isGeneral?null:document.getElementById('scrapOperation').value,code=document.getElementById('scrapCode').value.trim(),defect=document.getElementById('scrapDefect').value.trim(),category=document.getElementById('scrapCategory').value;
+ if((!isGeneral&&(!part_number_id||!operation_id))||!code||!defect||!category)return catStatus('scrapMessage','Complete all required fields.','error');
  const payload={company_id:activeCompanyId,part_number_id,operation_id,code,defect,category};
  const q=scrapEdit?sb.from('scrap_catalog').update({part_number_id,operation_id,code,defect,category}).eq('id',scrapEdit).eq('company_id',activeCompanyId):sb.from('scrap_catalog').insert(payload);
  const {error}=await q;if(error)return catStatus('scrapMessage',error.message,'error');
@@ -1240,7 +1328,7 @@ async function saveDt(e){
 async function deleteDt(id){if(!confirm('Delete this downtime event?'))return;const {error}=await sb.from('downtime_catalog').delete().eq('id',id).eq('company_id',activeCompanyId);if(error)return alert(error.message);loadDowntime();}
 function bindCatalog(){
  document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-cat]').forEach(x=>x.classList.remove('active'));b.classList.add('active');['scrap','downtime'].forEach(k=>document.getElementById('cat'+k[0].toUpperCase()+k.slice(1)).style.display=b.dataset.cat===k?'block':'none');});
- document.getElementById('scrapPartNumber').onchange=e=>loadScrapOperations(e.target.value);document.getElementById('scrapForm').onsubmit=saveScrap;document.getElementById('cancelScrap').onclick=resetScrap;document.getElementById('reloadScrap').onclick=loadScrap;
+ document.getElementById('scrapPartNumber').onchange=e=>loadScrapOperations(e.target.value);document.getElementById('scrapForm').onsubmit=saveScrap;document.getElementById('cancelScrap').onclick=resetScrap;document.getElementById('reloadScrap').onclick=loadScrap;document.getElementById('scrapGeneral').onchange=e=>applyScrapGeneralMode(e.target.checked);
  document.getElementById('downtimeForm').onsubmit=saveDt;document.getElementById('cancelDowntime').onclick=resetDt;document.getElementById('reloadDowntime').onclick=loadDowntime;
  loadPNSelect('scrapPartNumber');loadScrap();loadDowntime();
 }
@@ -1414,9 +1502,29 @@ function personnelOptions(role, selected=''){
 
 /* Phase 1.7.A Capture foundation uses existing production_captures as the future source of truth.
    No write is enabled until preflight confirms actual physical columns and RLS. */
-async function renderStatusFoundation(){
+/* Phase 3.1.C — master data (machines, shifts, customers, part numbers, personnel, operations,
+   links) rarely changes between visits, so it's cached for a short window instead of being
+   refetched — with everything else — on every single trip to Production. Sessions and hourly
+   counts are live data and are always fetched fresh. Pass force=true to bypass the cache
+   (used after actions that change master data elsewhere, e.g. adding a machine). */
+let statusMasterCache=null;
+const STATUS_MASTER_TTL_MS=60000;
+/* Scrap/Downtime catalogs used by every capture form (Real Time, Finish Session, Capture).
+   Previously refetched on every single machine-profile open; now cached the same way. */
+let catalogCache=null;
+async function getCatalogsCached(force=false){
+  if(catalogCache&&!force&&(Date.now()-catalogCache.ts)<STATUS_MASTER_TTL_MS&&catalogCache.companyId===activeCompanyId)return catalogCache;
+  const [sc,dc]=await Promise.all([
+    sb.from('scrap_catalog').select('id,code,defect,part_number_id,operation_id').eq('company_id',activeCompanyId),
+    sb.from('downtime_catalog').select('id,code,downtime').eq('company_id',activeCompanyId)
+  ]);
+  catalogCache={companyId:activeCompanyId,ts:Date.now(),scrap:sc.data||[],downtime:dc.data||[]};
+  return catalogCache;
+}
+async function renderStatusFoundation(force=false){
   if(!sb||!activeCompanyId){view.innerHTML='<div class="panel"><h2>Production unavailable</h2><p>Supabase configuration or active company context is missing.</p></div>';return;}
-  const [m,sh,c,p,people,operations,opMachines,partMachineLinksResult,sessions]=await Promise.all([
+  const fresh=statusMasterCache&&!force&&(Date.now()-statusMasterCache.ts)<STATUS_MASTER_TTL_MS&&statusMasterCache.companyId===activeCompanyId;
+  const masterPromise=fresh?Promise.resolve(null):Promise.all([
     sb.from('machines').select('id,code,name').eq('company_id',activeCompanyId).order('code'),
     sb.from('shifts').select('id,code,name').eq('company_id',activeCompanyId).order('code'),
     sb.from('customers').select('id,code,name').eq('company_id',activeCompanyId).order('code'),
@@ -1424,14 +1532,24 @@ async function renderStatusFoundation(){
     sb.from('personnel').select('id,employee_id,first_name,last_name,role,is_active').eq('company_id',activeCompanyId).eq('is_active',true).order('employee_id'),
     sb.from('operations').select('id,part_number_id,operation_number,operation_name').eq('company_id',activeCompanyId).order('operation_number'),
     sb.from('operation_machine_cycle_times').select('operation_id,part_number_id,machine_id').eq('company_id',activeCompanyId),
-    sb.from('part_number_machines').select('part_number_id,machine_id'),
-    sb.from('machine_production_sessions').select('*,machines(code,name),shifts(code,name,start_time,end_time,excluded_planned_minutes),customers(code,name),part_numbers(part_number,description),operations(operation_number,operation_name,ideal_cycle_time_seconds)').eq('company_id',activeCompanyId).order('started_at')
+    sb.from('part_number_machines').select('part_number_id,machine_id')
   ]);
-  const errors=[m,sh,c,p,people,operations,opMachines,partMachineLinksResult,sessions].filter(x=>x.error);
-  if(errors.length){view.innerHTML=`<div class="panel"><h2>Production module not ready</h2><p>${escapeHtml(errors[0].error.message)}</p><p>Confirm the required migrations are installed.</p></div>`;return;}
-  const machines=m.data||[], shifts=sh.data||[], customers=c.data||[], parts=p.data||[], personnel=people.data||[], operationList=operations.data||[], operationMachineLinks=opMachines.data||[], partMachineLinks=partMachineLinksResult.data||[], allSessions=sessions.data||[], active=allSessions.filter(x=>['RUNNING','ACTIVE','IN_PROGRESS'].includes(String(x.status||'').toUpperCase()));
+  const [masterResult,sessions,hourlyRows]=await Promise.all([
+    masterPromise,
+    sb.from('machine_production_sessions').select('*,machines(code,name),shifts(code,name,start_time,end_time,excluded_planned_minutes),customers(code,name),part_numbers(part_number,description),operations(operation_number,operation_name,ideal_cycle_time_seconds)').eq('company_id',activeCompanyId).order('started_at'),
+    sb.from('production_captures').select('session_id').eq('company_id',activeCompanyId).not('hour_slot','is',null).not('session_id','is',null)
+  ]);
+  if(masterResult){
+    const [m,sh,c,p,people,operations,opMachines,partMachineLinksResult]=masterResult;
+    const errors=[m,sh,c,p,people,operations,opMachines,partMachineLinksResult].filter(x=>x.error);
+    if(errors.length){view.innerHTML=`<div class="panel"><h2>Production module not ready</h2><p>${escapeHtml(errors[0].error.message)}</p><p>Confirm the required migrations are installed.</p></div>`;return;}
+    statusMasterCache={companyId:activeCompanyId,ts:Date.now(),machines:m.data||[],shifts:sh.data||[],customers:c.data||[],parts:p.data||[],personnel:people.data||[],operationList:operations.data||[],operationMachineLinks:opMachines.data||[],partMachineLinks:partMachineLinksResult.data||[]};
+  }
+  if(sessions.error){view.innerHTML=`<div class="panel"><h2>Production module not ready</h2><p>${escapeHtml(sessions.error.message)}</p><p>Confirm the required migrations are installed.</p></div>`;return;}
+  const {machines,shifts,customers,parts,personnel,operationList,operationMachineLinks,partMachineLinks}=statusMasterCache;
+  const allSessions=sessions.data||[], active=allSessions.filter(x=>['RUNNING','ACTIVE','IN_PROGRESS'].includes(String(x.status||'').toUpperCase()));
   const hourCounts=new Map();
-  if(active.length){const hc=await sb.from('production_captures').select('session_id,hour_slot').in('session_id',active.map(x=>x.id)).not('hour_slot','is',null);(hc.data||[]).forEach(r=>hourCounts.set(r.session_id,(hourCounts.get(r.session_id)||0)+1));}
+  (hourlyRows.data||[]).forEach(r=>hourCounts.set(r.session_id,(hourCounts.get(r.session_id)||0)+1));
   const fullName=x=>[x.first_name,x.last_name].filter(Boolean).join(' ')||x.employee_id||'';
   const activeMachineIds=new Set(active.map(x=>x.machine_id));
   view.innerHTML=`
@@ -1464,7 +1582,7 @@ async function renderStatusFoundation(){
     const machine=machines.find(x=>x.id===machineId); if(!machine)return;
     const s=active.find(x=>x.machine_id===machineId);
     const machineOps=operationMachineLinks.filter(x=>x.machine_id===machineId);
-    const linkedPartRows=partMachineLinksResult.data||[];
+    const linkedPartRows=partMachineLinks;
     const machinePartIds=new Set(linkedPartRows.filter(x=>String(x.machine_id)===String(machineId)).map(x=>String(x.part_number_id)));
     const relatedParts=parts.filter(x=>machinePartIds.has(String(x.id)));
     const profileRows=`<div class="status-profile-grid">
@@ -1503,13 +1621,13 @@ async function renderStatusFoundation(){
         modal.querySelector('#backToHours')?.addEventListener('click',()=>openHourPanel(true));
         const scrapCatalog=window.__guvelFinishScrapCatalog||[]; const downtimeCatalog=window.__guvelFinishDowntimeCatalog||[];
         const scrapRows=modal.querySelector('#finishScrapRows'),dtRows=modal.querySelector('#finishDowntimeRows');
-        const scrapOptions=scrapCatalog.filter(x=>String(x.part_number_id)===String(s.part_number_id)&&(!s.operation_id||String(x.operation_id)===String(s.operation_id))).map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.defect)}</option>`).join('');
+        const scrapOptions=matchingScrapCatalog(scrapCatalog,s.part_number_id,s.operation_id).map(x=>`<option value="${x.id}">${escapeHtml(x.code)}${x.part_number_id==null?' (General)':''} — ${escapeHtml(x.defect)}</option>`).join('');
         const dtOptions=downtimeCatalog.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.downtime)}</option>`).join('');
         modal.querySelector('#addFinishScrap').onclick=()=>{const row=document.createElement('div');row.className='form-grid';row.innerHTML=`<select class="finish-scrap-id" required><option value="">Select defect</option>${scrapOptions}</select><input class="finish-scrap-qty" type="number" min="1" step="1" placeholder="Qty" required><input class="finish-scrap-reason" placeholder="Reason"><button type="button" class="danger">Delete</button>`;row.querySelector('button').onclick=()=>row.remove();scrapRows.appendChild(row);};
         modal.querySelector('#addFinishDowntime').onclick=()=>{const row=document.createElement('div');row.className='form-grid';row.innerHTML=`<select class="finish-dt-id" required><option value="">Select downtime</option>${dtOptions}</select><input class="finish-dt-min" type="number" min="0.01" step="0.01" placeholder="Minutes" required><select class="finish-dt-type" required><option value="">Type</option><option>Planned</option><option>Unplanned</option></select><input class="finish-dt-reason" placeholder="Reason"><button type="button" class="danger">Delete</button>`;row.querySelector('button').onclick=()=>row.remove();dtRows.appendChild(row);};
         modal.querySelector('#finishCaptureForm').onsubmit=async e=>{e.preventDefault();const msg=modal.querySelector('#finishMsg'),btn=modal.querySelector('#saveFinishButton');const qty=Number(modal.querySelector('#finishQty').value);if(!Number.isInteger(qty)||qty<0){msg.textContent='Production quantity must be a whole number >= 0.';msg.className='status error';return;}const scrap=[...scrapRows.querySelectorAll('.form-grid')].map(r=>({scrap_catalog_id:r.querySelector('.finish-scrap-id').value,quantity:Number(r.querySelector('.finish-scrap-qty').value),reason:r.querySelector('.finish-scrap-reason').value.trim()||null}));const dt=[...dtRows.querySelectorAll('.form-grid')].map(r=>({downtime_catalog_id:r.querySelector('.finish-dt-id').value,minutes:Number(r.querySelector('.finish-dt-min').value),event_type:r.querySelector('.finish-dt-type').value,reason:r.querySelector('.finish-dt-reason').value.trim()||null}));const scrapTotal=scrap.reduce((a,x)=>a+x.quantity,0);if(scrapTotal>qty){msg.textContent='Total scrap cannot exceed production quantity.';msg.className='status error';return;}btn.disabled=true;btn.textContent='Saving…';let captureId=null;try{if(replaceHours){const existing=await sb.from('production_captures').select('id').eq('session_id',s.id).eq('company_id',activeCompanyId).not('hour_slot','is',null);for(const row of (existing.data||[])){await sb.from('scrap_events').delete().eq('production_capture_id',row.id).eq('company_id',activeCompanyId);await sb.from('downtime_events').delete().eq('production_capture_id',row.id).eq('company_id',activeCompanyId);await sb.from('production_captures').delete().eq('id',row.id).eq('company_id',activeCompanyId);}}const payload={company_id:activeCompanyId,production_date:modal.querySelector('#finishDate').value,shift_id:s.shift_id,lot_number:s.lot_number,customer_id:s.customer_id,part_number_id:s.part_number_id,machine_id:s.machine_id,operation_id:s.operation_id,operator_name:null,supervisor_name:null,production_quantity:qty,confirmed:true,confirmed_at:now,session_id:s.id,hour_slot:null};const pr=await sb.from('production_captures').insert(payload).select('id').single();if(pr.error)throw new Error('Production: '+pr.error.message);captureId=pr.data.id;if(scrap.length){const sr=await sb.from('scrap_events').insert(scrap.map(x=>({...x,production_capture_id:captureId,company_id:activeCompanyId})));if(sr.error)throw new Error('Scrap: '+sr.error.message);}if(dt.length){const dr=await sb.from('downtime_events').insert(dt.map(x=>({...x,production_capture_id:captureId,company_id:activeCompanyId})));if(dr.error)throw new Error('Downtime: '+dr.error.message);}const fr=await sb.from('machine_production_sessions').update({status:'COMPLETED',finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);if(fr.error)throw new Error('Finish Session: '+fr.error.message);closeModal();dashboardDataLoaded=false;registerDataLoaded=false;await renderStatusFoundation();}catch(err){if(captureId)await sb.from('production_captures').delete().eq('id',captureId).eq('company_id',activeCompanyId);msg.textContent=err.message;msg.className='status error';btn.disabled=false;btn.textContent='Save and Finish Session';}};
       };
-window.__guvelFinishScrapCatalog=await sb.from('scrap_catalog').select('id,code,defect,part_number_id,operation_id').eq('company_id',activeCompanyId).then(x=>x.data||[]);window.__guvelFinishDowntimeCatalog=await sb.from('downtime_catalog').select('id,code,downtime').eq('company_id',activeCompanyId).then(x=>x.data||[]);
+const __cats=await getCatalogsCached();window.__guvelFinishScrapCatalog=__cats.scrap;window.__guvelFinishDowntimeCatalog=__cats.downtime;
       const hourFloorISO=(d)=>{const x=new Date(d);x.setMinutes(0,0,0);return x.toISOString();};
       const hourLabel=(iso)=>{const d=new Date(iso);const pad=n=>String(n).padStart(2,'0');const e=new Date(d.getTime()+3600000);return `${pad(d.getHours())}:00 – ${pad(e.getHours())}:00`;};
       const sessionHourSlots=()=>{const out=[];let cur=new Date(hourFloorISO(s.started_at||new Date()));const end=new Date(hourFloorISO(new Date()));while(cur<=end){out.push(cur.toISOString());cur=new Date(cur.getTime()+3600000);}return out;};
@@ -1531,9 +1649,9 @@ window.__guvelFinishScrapCatalog=await sb.from('scrap_catalog').select('id,code,
         return captureId;
       };
       const renderEntryEditor=(host,{qty=0,scrap=[],downtime=[],onCancel,onSave,busyLabel='Save hour'})=>{
-        const scrapCatalog=(window.__guvelFinishScrapCatalog||[]).filter(x=>String(x.part_number_id)===String(s.part_number_id)&&(!s.operation_id||String(x.operation_id)===String(s.operation_id)));
+        const scrapCatalog=matchingScrapCatalog(window.__guvelFinishScrapCatalog||[],s.part_number_id,s.operation_id);
         const downtimeCatalog=window.__guvelFinishDowntimeCatalog||[];
-        const scrapOptions=scrapCatalog.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.defect)}</option>`).join('');
+        const scrapOptions=scrapCatalog.map(x=>`<option value="${x.id}">${escapeHtml(x.code)}${x.part_number_id==null?' (General)':''} — ${escapeHtml(x.defect)}</option>`).join('');
         const dtOptions=downtimeCatalog.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.downtime)}</option>`).join('');
         host.innerHTML=`<form class="form-grid entry-editor-form">
           <div class="field"><label>Good Pieces *</label><input class="entry-qty" type="number" min="0" step="1" value="${qty}" required></div>
@@ -1622,9 +1740,12 @@ window.__guvelFinishScrapCatalog=await sb.from('scrap_catalog').select('id,code,
           modal.querySelector('#confirmFinishSession')?.addEventListener('click',async()=>{
             const msg=modal.querySelector('#hourPanelMsg'),btn=modal.querySelector('#confirmFinishSession');
             btn.disabled=true;btn.textContent='Finishing…';
-            const fr=await sb.from('machine_production_sessions').update({status:'COMPLETED',finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);
-            if(fr.error){msg.textContent='Finish Session: '+fr.error.message;msg.className='status error';btn.disabled=false;btn.textContent='Confirm and Finish Session';return;}
-            dashboardDataLoaded=false;registerDataLoaded=false;closeModal();await renderStatusFoundation();
+            try{
+              await consolidateSessionHours(s);
+              const fr=await sb.from('machine_production_sessions').update({status:'COMPLETED',finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);
+              if(fr.error)throw new Error('Finish Session: '+fr.error.message);
+              dashboardDataLoaded=false;registerDataLoaded=false;closeModal();await renderStatusFoundation();
+            }catch(err){msg.textContent=err.message;msg.className='status error';btn.disabled=false;btn.textContent='Confirm and Finish Session';}
           });
         };
         draw();
@@ -1652,7 +1773,10 @@ async function renderCaptureFoundation(){
   const customers=c.data||[],partNumbers=p.data||[],machines=m.data||[],shifts=sh.data||[],operations=o.data||[],downtimeCatalog=d.data||[];
   const defectsByPart={};
   const {data:defects}=await sb.from('scrap_catalog').select('id,code,defect,part_number_id,operation_id').eq('company_id',activeCompanyId).order('code');
-  (defects||[]).forEach(x=>(defectsByPart[x.part_number_id]??=[]).push(x));
+  /* Phase 3.1.C — General defects (part_number_id null) apply to every Part Number. */
+  const generalDefects=(defects||[]).filter(x=>x.part_number_id==null);
+  (defects||[]).filter(x=>x.part_number_id!=null).forEach(x=>(defectsByPart[x.part_number_id]??=[]).push(x));
+  partNumbers.forEach(pn=>{defectsByPart[pn.id]=[...(defectsByPart[pn.id]||[]),...generalDefects];});
 
   // Draft arrays: Scrap/Downtime are part of the Capture and are not persisted until the single SAVE.
   let scrapDraft=[];
@@ -2155,7 +2279,7 @@ async function plantOpenMachineLive(machineId,list){
     const s=entry?.s||null;
     const state=entry?.state||'idle';
     if(!s){
-      host.innerHTML=`<div class="status-modal-backdrop" data-close="1"></div><section class="plant-live-body" role="dialog" aria-modal="true" aria-labelledby="plantLiveTitle"><div class="plant-live-head"><div><div class="eyebrow">PLANT NOW · LIVE</div><h2 id="plantLiveTitle">${escapeHtml(machine.code)} — ${escapeHtml(machine.name||'Machine')}</h2></div><button type="button" class="secondary" data-close="1" aria-label="Close">✕</button></div><div class="plant-live-idle"><p>This machine has no active production session.</p><button type="button" class="primary" id="plantLiveOpenStatus">Open in Production</button></div></section>`;
+      host.innerHTML=`<div class="status-modal-backdrop" data-close="1"></div><section class="plant-live-body" role="dialog" aria-modal="true" aria-labelledby="plantLiveTitle"><div class="plant-live-head"><div><div class="eyebrow">PLANT NOW · LIVE</div><h2 id="plantLiveTitle">${escapeHtml(machine.code)} — ${escapeHtml(machine.name||'Machine')}</h2></div><div class="plant-live-head-actions"><button type="button" class="secondary" id="plantLiveFullscreen">⛶ Full Screen</button><button type="button" class="secondary" data-close="1" aria-label="Close">✕ Close</button></div></div><div class="plant-live-idle"><p>This machine has no active production session.</p><button type="button" class="primary" id="plantLiveOpenStatus">Open in Production</button></div></section>`;
     }else{
       const r=await sb.from('production_captures').select('id,hour_slot,production_quantity,scrap_events(quantity),downtime_events(minutes,event_type)').eq('session_id',s.id).eq('company_id',activeCompanyId).not('hour_slot','is',null).order('hour_slot');
       const hours=(r.data||[]).slice().sort((a,b)=>a.hour_slot<b.hour_slot?-1:1);
@@ -2168,11 +2292,11 @@ async function plantOpenMachineLive(machineId,list){
         return `<div class="hour-row"><div class="hour-row-main"><strong>${label}</strong><span class="hour-row-stats"><b>${rt.qty}</b> good<span>·</span><b class="${rt.scrap?'is-scrap':''}">${rt.scrap}</b> scrap<span>·</span><b class="${rt.down?'is-down':''}">${rt.down.toFixed(0)}</b> min down</span></div></div>`;}).join('')||'<div class="plant-live-empty">No hours logged yet with Real Time.</div>';
       const shiftWin=shiftWindowFor(s);
       host.innerHTML=`<div class="status-modal-backdrop" data-close="1"></div><section class="plant-live-body plant-live-dashboard" role="dialog" aria-modal="true" aria-labelledby="plantLiveTitle">
-        <div class="plant-live-head"><div><div class="eyebrow">PLANT NOW · LIVE</div><h2 id="plantLiveTitle">${escapeHtml(machine.code)} — ${escapeHtml(machine.name||'Machine')}</h2><span class="plant-live-state ${state==='run'?'is-run':state==='watch'?'is-watch':''}">${state==='idle'?'IDLE':state==='watch'?'BELOW TARGET':'RUNNING'}</span></div><button type="button" class="secondary" data-close="1" aria-label="Close">✕</button></div>
+        <div class="plant-live-head"><div><div class="eyebrow">PLANT NOW · LIVE</div><h2 id="plantLiveTitle">${escapeHtml(machine.code)} — ${escapeHtml(machine.name||'Machine')}</h2><span class="plant-live-state ${state==='run'?'is-run':state==='watch'?'is-watch':''}">${state==='idle'?'IDLE':state==='watch'?'BELOW TARGET':'RUNNING'}</span></div><div class="plant-live-head-actions"><button type="button" class="secondary" id="plantLiveFullscreen">⛶ Full Screen</button><button type="button" class="secondary" data-close="1" aria-label="Close">✕ Close</button></div></div>
         <div class="status-active-detail"><div><span>Customer</span><strong>${escapeHtml(s.customers?.name||'—')}</strong></div><div><span>Part Number</span><strong>${escapeHtml(s.part_numbers?.part_number||'—')}</strong></div><div><span>Operation</span><strong>${escapeHtml(s.operations?.operation_number||'—')} ${escapeHtml(s.operations?.operation_name||'')}</strong></div><div><span>Lot</span><strong>${escapeHtml(s.lot_number||'—')}</strong></div><div><span>Shift</span><strong>${escapeHtml(s.shifts?.code||'—')}${shiftWin?` (${formatClock(shiftWin.start)} – ${formatClock(shiftWin.end)})`:''}</strong></div><div><span>Started</span><strong>${s.started_at?new Date(s.started_at).toLocaleString():'—'}</strong></div></div>
 
         <div class="session-oee-section">
-          <div class="session-oee-head"><h3>Session OEE</h3><span class="label">Since ${shiftWin?formatClock(new Date(Math.max(new Date(s.started_at).getTime(),shiftWin.start.getTime()))):new Date(s.started_at).toLocaleTimeString()}, live</span></div>
+          <div class="session-oee-head"><h3>Session OEE</h3><span class="label">${hours.length} hour${hours.length===1?'':'s'} logged, live</span></div>
           <div class="session-oee-grid">
             ${sessionOeeRingMarkup(m,t)}
             <div class="session-metric-pills">
@@ -2181,20 +2305,21 @@ async function plantOpenMachineLive(machineId,list){
               ${sessionMetricPill('Quality',m.quality,t.quality)}
             </div>
           </div>
-          <p class="session-oee-note">On track: at or above target. Watch: within 10 points of target. Attention: more than 10 points below. Planned time counts the shift elapsed so far, minus breaks; Performance needs a configured cycle time.</p>
+          <p class="session-oee-note">On track: at or above target. Watch: within 10 points of target. Attention: more than 10 points below. Planned time is the total length of the hours logged so far, minus any Planned downtime among them; Performance needs a configured cycle time.</p>
         </div>
 
         <div class="hour-totals"><div><span>Good pieces</span><strong>${m.good.toLocaleString()}</strong></div><div><span>Scrap</span><strong>${m.totals.scrap.toLocaleString()}</strong></div><div><span>Scrap rate</span><strong>${scrapPct}%</strong></div><div><span>Downtime</span><strong>${(m.totals.planned+m.totals.unplanned).toFixed(0)} min</strong></div><div><span>Hours logged</span><strong>${hours.length}</strong></div></div>
         <div class="hour-row-list">${rowsHtml}</div>
         <div class="form-actions hour-panel-actions"><button type="button" class="secondary" id="plantLiveOpenStatus">Open in Production</button><button type="button" class="primary" data-close="1">Close</button></div>
-        <p class="plant-live-refresh">Updates automatically every 30 seconds.</p>
+        <p class="plant-live-refresh">Updates automatically every 60 seconds.</p>
       </section>`;
     }
     host.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click',close));
     host.querySelector('#plantLiveOpenStatus')?.addEventListener('click',()=>{close();plantOpenMachine(machineId);});
+    host.querySelector('#plantLiveFullscreen')?.addEventListener('click',()=>{if(document.fullscreenElement)document.exitFullscreen?.();else host.requestFullscreen?.().catch(()=>{});});
   };
   host.hidden=false;document.addEventListener('keydown',onEsc);await draw();
-  clearInterval(host.__timer);host.__timer=setInterval(()=>{if(!host.hidden)draw();},30000);
+  clearInterval(host.__timer);host.__timer=setInterval(()=>{if(!host.hidden)draw();},60000);
 }
 
 

@@ -1,4 +1,4 @@
-> **Current release: Phase 3.1.B — Shift-bound Real Time, session OEE dashboard, Single Entry, "Production" rename.** See `docs/PHASE_3_1_B_SHIFT_BOUND_AND_SESSION_OEE.md` (built on 3.1.A).
+> **Current release: Phase 3.1.C — Full-screen machine dashboard, one register per session, corrected session OEE, faster Production, editable/General defects.** See `docs/PHASE_3_1_C_FULLSCREEN_CONSOLIDATION_GENERAL_DEFECTS.md`. Run `sql/023_phase_3_1_C_general_scrap_defects.sql` before deploying.
 
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard
