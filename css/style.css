@@ -214,7 +214,7 @@ td .actions,td.actions{gap:6px;flex-wrap:nowrap}
 .auth-foot{margin-top:28px;text-align:center;font-size:13px;color:#6D8199}
 
 /* custom cursor (desktop pointer only): the dot replaces the native cursor, as in previous releases */
-#laserCursor,#authLaserCursor{position:fixed;left:0;top:0;width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 0 3px rgba(12,192,223,.25);pointer-events:none;z-index:2147483647;transform:translate(-50%,-50%);transition:width .12s,height .12s}
+#laserCursor,#authLaserCursor{position:fixed;left:0;top:0;width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 0 3px rgba(12,192,223,.25);pointer-events:none;z-index:2147483647;transition:width .12s,height .12s;will-change:transform}
 body.cursor-hover #laserCursor,body.cursor-hover #authLaserCursor{width:13px;height:13px}
 body.app-active #authLaserCursor{display:none}
 @media (pointer:fine){body,body button,body input,body select,body textarea,body a,body label{cursor:none}}
@@ -782,6 +782,13 @@ body.status-modal-open,.status-modal-open{overflow:hidden}
 /* ---------- 25. Plant Now live machine panel (Phase 3.1.C) ----------
    A dedicated full-screen dashboard for one machine, not a small popup card. */
 .plant-live-modal{position:fixed;inset:0;z-index:1000;background:var(--bg);overflow-y:auto;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+/* Phase 3.1.F: once native Full Screen is engaged, the Full Screen/Close buttons (Esc exits
+   fullscreen already) get out of the way, and the custom cursor — which lives outside this
+   element and so is invisible once the browser isolates the fullscreen element's rendering —
+   is swapped back for the native one, restored on every element inside it. */
+.plant-live-modal:fullscreen,.plant-live-modal:-webkit-full-screen{cursor:auto}
+.plant-live-modal:fullscreen *,.plant-live-modal:-webkit-full-screen *{cursor:auto!important}
+.plant-live-modal:fullscreen .plant-live-head-actions,.plant-live-modal:-webkit-full-screen .plant-live-head-actions{display:none}
 .plant-live-modal .status-modal-backdrop{display:none}
 .plant-live-body{position:relative;width:100%;max-width:1100px;margin:0 auto;padding:22px 24px 48px}
 .plant-live-head{position:sticky;top:0;z-index:2;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:14px 0;margin-bottom:14px;border-bottom:1px solid var(--line-soft);background:var(--bg)}
@@ -810,7 +817,7 @@ body.status-modal-open,.status-modal-open{overflow:hidden}
 .session-oee-visual{position:relative;width:240px;height:240px;margin:0 auto}
 .session-oee-visual svg{width:100%;height:100%;display:block}
 .session-oee-center{position:absolute;inset:0;width:88px;height:88px;margin:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;pointer-events:none;text-align:center}
-.session-oee-center strong{font-family:var(--fig);font-weight:600;font-size:30px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.01em;white-space:nowrap}
+.session-oee-center strong{font-family:var(--fig);font-weight:600;font-size:25px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.01em;white-space:nowrap}
 .session-oee-center span{font-size:10px;letter-spacing:.08em;color:var(--text-3)}
 .session-oee-state{margin-top:3px;padding:2px 9px;font-size:10px;font-weight:600;letter-spacing:.03em;border-radius:1px;white-space:nowrap}
 .session-oee-legend{width:240px;margin:12px auto 0}

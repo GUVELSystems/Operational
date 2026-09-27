@@ -2174,23 +2174,29 @@ window.addEventListener('DOMContentLoaded',()=>{
   bindAuth();
   bootstrapSession();
 });
-/* GUVEL cursor — desktop only */
+/* GUVEL cursor — desktop only.
+   Phase 3.1.F: was setting style.left/top on every single mousemove event (triggers layout on
+   each one); now coalesces to one requestAnimationFrame per frame and moves the dot with a
+   transform (compositor-only, no layout), which is what was making the cursor feel like it lagged. */
 (()=>{
   const dots=[document.getElementById('laserCursor'),document.getElementById('authLaserCursor')].filter(Boolean);
   if(!dots.length || window.matchMedia('(pointer:coarse)').matches) return;
-  document.addEventListener('mousemove',e=>dots.forEach(dot=>{dot.style.left=e.clientX+'px';dot.style.top=e.clientY+'px';}));
-  document.addEventListener('mouseover',e=>{if(e.target.closest('button,a,input,select,textarea,.card,.panel,.tab,.nav-item,.auth-card'))document.body.classList.add('cursor-hover');});
-  document.addEventListener('mouseout',e=>{if(e.target.closest('button,a,input,select,textarea,.card,.panel,.tab,.nav-item,.auth-card'))document.body.classList.remove('cursor-hover');});
+  let x=0,y=0,scheduled=false;
+  const paint=()=>{scheduled=false;const t=`translate3d(${x}px,${y}px,0) translate(-50%,-50%)`;dots.forEach(dot=>{dot.style.transform=t;});};
+  document.addEventListener('mousemove',e=>{x=e.clientX;y=e.clientY;if(!scheduled){scheduled=true;requestAnimationFrame(paint);}},{passive:true});
+  document.addEventListener('mouseover',e=>{if(e.target.closest('button,a,input,select,textarea,.card,.panel,.tab,.nav-item,.auth-card'))document.body.classList.add('cursor-hover');},{passive:true});
+  document.addEventListener('mouseout',e=>{if(e.target.closest('button,a,input,select,textarea,.card,.panel,.tab,.nav-item,.auth-card'))document.body.classList.remove('cursor-hover');},{passive:true});
 })();
 
-/* Phase 3.0.A — theme selector: System → Navy → Light. Stored per browser. */
+/* Phase 3.1.F — two themes only: Navy and Light. The OS preference still picks the default the
+   very first time (before the person has ever chosen), but the toggle itself only ever shows one
+   of the two concrete themes — there is no third "system" state to click through. */
 (()=>{
-  const KEY='guvel-theme',root=document.documentElement,order=['system','dark','light'],names={system:'System theme',dark:'Navy theme',light:'Light theme'},icons={system:'◐',dark:'●',light:'○'};
-  const read=()=>{try{return localStorage.getItem(KEY)||'system';}catch{return 'system';}};
+  const KEY='guvel-theme',root=document.documentElement,order=['dark','light'],names={dark:'Navy theme',light:'Light theme'},icons={dark:'●',light:'○'};
+  const read=()=>{try{const v=localStorage.getItem(KEY);if(v==='dark'||v==='light')return v;}catch{}return window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';};
   const refreshCharts=()=>{try{if(typeof current!=='undefined'&&current==='Dashboard'&&dashboardDataLoaded)renderActiveDashboard();}catch(e){console.warn(e);}};
-  const apply=(mode,rerender)=>{if(mode==='system')root.removeAttribute('data-theme');else root.setAttribute('data-theme',mode);const b=document.getElementById('themeBtn');if(b){b.textContent=icons[mode];b.title=names[mode];b.setAttribute('aria-label',names[mode]+'. Change theme');}if(rerender)refreshCharts();};
-  window.addEventListener('DOMContentLoaded',()=>{apply(read(),false);const b=document.getElementById('themeBtn');if(b)b.addEventListener('click',()=>{const next=order[(order.indexOf(read())+1)%order.length];try{localStorage.setItem(KEY,next);}catch{}apply(next,true);});});
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',()=>{if(read()==='system')refreshCharts();});
+  const apply=(mode,rerender)=>{root.setAttribute('data-theme',mode);const b=document.getElementById('themeBtn');if(b){b.textContent=icons[mode];b.title=names[mode];b.setAttribute('aria-label',names[mode]+'. Change theme');}if(rerender)refreshCharts();};
+  window.addEventListener('DOMContentLoaded',()=>{const mode=read();try{localStorage.setItem(KEY,mode);}catch{}apply(mode,false);const b=document.getElementById('themeBtn');if(b)b.addEventListener('click',()=>{const next=order[(order.indexOf(read())+1)%order.length];try{localStorage.setItem(KEY,next);}catch{}apply(next,true);});});
 })();
 
 /* Phase 3.0.B — Dashboard filter popover, opened from the button next to the live badge. */
@@ -2209,7 +2215,9 @@ function dashboardFilterButton(){const n=dashboardActiveFilterCount();return `<b
   document.addEventListener('keydown',e=>{if(e.key==='Escape'){const p=pop();if(p&&!p.hidden){e.stopPropagation();close();}}});
   window.addEventListener('resize',()=>place(),{passive:true});
   window.addEventListener('scroll',()=>place(),{passive:true,capture:true});
-  new MutationObserver(()=>{const p=pop();if(p&&!p.hidden)place();}).observe(document.documentElement,{childList:true,subtree:true});
+  /* Phase 3.1.F: a whole-document MutationObserver used to run here on every single DOM change
+     anywhere in the app (every chart redraw, every table refresh) just to reposition this popover
+     in a rare edge case. Removed for performance; resize/scroll above cover the common cases. */
 })();
 
 /* =====================================================================

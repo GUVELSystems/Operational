@@ -1,4 +1,4 @@
-> **Current release: Phase 3.1.E — OEE ring spacing fixed, Registers machine bug fixed, smaller logo.** See `docs/PHASE_3_1_E_RING_FIX_REGISTERS_LOGO.md`.
+> **Current release: Phase 3.1.F — Ring size, Full Screen cleanup, cursor performance, two themes only.** See `docs/PHASE_3_1_F_POLISH_PERFORMANCE_TWO_THEMES.md`.
 
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard
