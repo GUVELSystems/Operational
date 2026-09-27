@@ -1,4 +1,4 @@
-> **Current release: Phase 3.1.D — Session OEE ring redesigned; Operator/Supervisor shown and saved.** See `docs/PHASE_3_1_D_OEE_VISUAL_OPERATOR_SUPERVISOR.md`.
+> **Current release: Phase 3.1.E — OEE ring spacing fixed, Registers machine bug fixed, smaller logo.** See `docs/PHASE_3_1_E_RING_FIX_REGISTERS_LOGO.md`.
 
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard

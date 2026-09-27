@@ -213,10 +213,13 @@ function sessionOeeRingMarkup(m,t){
      color meaning. */
   const vals=[m.availability,m.performance,m.quality];
   const ringColors=['var(--chart-1)','var(--chart-2)','var(--chart-3)'];
-  const rings=[{r:78,w:12},{r:60,w:12},{r:42,w:12}];
-  const paths=rings.map((ring,i)=>{const c=2*Math.PI*ring.r,v=vals[i]==null?0:vals[i];return `<circle class="guvel-oee-track" cx="100" cy="100" r="${ring.r}"/><circle class="guvel-oee-value" cx="100" cy="100" r="${ring.r}" style="stroke:${ringColors[i]};stroke-width:${ring.w}" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${(c*(1-v)).toFixed(2)}"/>`;}).join('');
+  /* Generous spacing so the percentage never touches the rings: core r=48 leaves a clear 8px
+     gap to the innermost ring (which starts at r=56), and the three ring bands themselves keep
+     a 6px gap between each other. */
+  const rings=[{r:104,w:16},{r:80,w:16},{r:56,w:16}];
+  const paths=rings.map((ring,i)=>{const c=2*Math.PI*ring.r,v=vals[i]==null?0:vals[i];return `<circle class="guvel-oee-track" cx="120" cy="120" r="${ring.r}"/><circle class="guvel-oee-value" cx="120" cy="120" r="${ring.r}" style="stroke:${ringColors[i]};stroke-width:${ring.w}" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${(c*(1-v)).toFixed(2)}"/>`;}).join('');
   const oeeState=metricState(m.oee,t.oee);
-  return `<div class="session-oee-visual-wrap"><div class="session-oee-visual"><svg viewBox="0 0 200 200" role="img" aria-label="Session OEE ${m.oee==null?'no data':(m.oee*100).toFixed(1)+'%'}"><g transform="rotate(-90 100 100)">${paths}</g><circle cx="100" cy="100" r="34" class="guvel-oee-core"/></g></svg><div class="session-oee-center"><strong>${m.oee==null?'—':(m.oee*100).toFixed(1)+'%'}</strong><span>OEE</span><em class="session-oee-state" style="color:${metricStateInk(oeeState)};background:${metricStateSoft(oeeState)}">${metricStateLabel(oeeState)}</em></div></div><div class="guvel-oee-legend session-oee-legend"><div><span class="guvel-oee-dot" style="background:${ringColors[0]}"></span><span>Availability</span><b>${vals[0]==null?'—':(vals[0]*100).toFixed(1)+'%'}</b></div><div><span class="guvel-oee-dot" style="background:${ringColors[1]}"></span><span>Performance</span><b>${vals[1]==null?'—':(vals[1]*100).toFixed(1)+'%'}</b></div><div><span class="guvel-oee-dot" style="background:${ringColors[2]}"></span><span>Quality</span><b>${vals[2]==null?'—':(vals[2]*100).toFixed(1)+'%'}</b></div></div></div>`;
+  return `<div class="session-oee-visual-wrap"><div class="session-oee-visual"><svg viewBox="0 0 240 240" role="img" aria-label="Session OEE ${m.oee==null?'no data':(m.oee*100).toFixed(1)+'%'}"><g transform="rotate(-90 120 120)">${paths}</g><circle cx="120" cy="120" r="48" class="guvel-oee-core"/></g></svg><div class="session-oee-center"><strong>${m.oee==null?'—':(m.oee*100).toFixed(1)+'%'}</strong><span>OEE</span><em class="session-oee-state" style="color:${metricStateInk(oeeState)};background:${metricStateSoft(oeeState)}">${metricStateLabel(oeeState)}</em></div></div><div class="guvel-oee-legend session-oee-legend"><div><span class="guvel-oee-dot" style="background:${ringColors[0]}"></span><span>Availability</span><b>${vals[0]==null?'—':(vals[0]*100).toFixed(1)+'%'}</b></div><div><span class="guvel-oee-dot" style="background:${ringColors[1]}"></span><span>Performance</span><b>${vals[1]==null?'—':(vals[1]*100).toFixed(1)+'%'}</b></div><div><span class="guvel-oee-dot" style="background:${ringColors[2]}"></span><span>Quality</span><b>${vals[2]==null?'—':(vals[2]*100).toFixed(1)+'%'}</b></div></div></div>`;
 }
 function sessionMetricPill(label,value,target){
   const state=metricState(value,target);
@@ -2052,7 +2055,9 @@ async function loadRegisters(force=false){
     if(prod.error)throw new Error(`Production Register: ${prod.error.message}`);
     if(scrap.error)throw new Error(`Scrap Register: ${scrap.error.message}`);
     if(down.error)throw new Error(`Downtime Register: ${down.error.message}`);
-    registerState.production=prod.data||[];
+    /* Fix: the Production register never normalized the embedded machines/operations objects
+       (Scrap and Downtime already did), so Machine and Operation always showed as "—". */
+    registerState.production=(prod.data||[]).map(r=>({...r,machine:r.machines,operation:r.operations}));
     registerState.scrap=(scrap.data||[]).map(r=>{const p=r.production_captures||{};return {...r,captured_at:p.captured_at,production_date:p.production_date,shift_id:p.shift_id,lot_number:p.lot_number,customer_id:p.customer_id,part_number_id:p.part_number_id,machine_id:p.machine_id,operation_id:p.operation_id,machine:p.machines||p.machine,operation:p.operations||p.operation,defect:r.scrap_catalog||r.scrapCatalog,scrap_cost:p.part_numbers?.scrap_cost||0};});
     registerState.downtime=(down.data||[]).map(r=>{const p=r.production_captures||{};return {...r,captured_at:p.captured_at,production_date:p.production_date,shift_id:p.shift_id,customer_id:p.customer_id,part_number_id:p.part_number_id,machine_id:p.machine_id,machine:p.machines||p.machine,downtime:r.downtime_catalog||r.downtimeCatalog};});
     registerDataLoaded=true;

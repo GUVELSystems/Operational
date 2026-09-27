@@ -683,15 +683,15 @@ body.status-modal-open,.status-modal-open{overflow:hidden}
    Proportions taken from the reference lockup (mark height = H):
    gap to text 0.24H · "GUVEL" cap height 0.29H · tagline cap height 0.09H ·
    both lines the same width · text block centered on the mark. */
-.topbar{min-height:72px}
-.nav-item{min-height:72px}
+.topbar{min-height:56px}
+.nav-item{min-height:56px}
 .brand-lockup{gap:13px;align-items:center}
-.brand-lockup .brand-logo{width:auto;height:64px;flex:none}
+.brand-lockup .brand-logo{width:auto;height:34px;flex:none}
 .brand-word{display:inline-flex;flex-direction:column;width:max-content;color:var(--ice);margin-top:3.6px}
 .brand-lockup .brand-word strong{display:flex;justify-content:space-between;font-family:var(--serif);font-weight:700;font-size:25px;line-height:.78;padding-top:1px;letter-spacing:0;color:var(--ice)}
 .brand-lockup .brand-word small{display:block;margin-top:5.5px;margin-right:.03em;font-family:var(--serif);font-weight:400;font-size:8px;line-height:1;letter-spacing:-.028em;word-spacing:.2em;color:var(--ice);white-space:nowrap;text-transform:uppercase}
-.master-list{top:88px}
-@media (max-width:900px){.topbar{min-height:0}.brand{min-height:56px}.brand-word{margin-top:2.6px}.nav-item{min-height:46px}.brand-lockup .brand-logo{height:44px}.brand-lockup{gap:11px}.brand-lockup .brand-word strong{font-size:19px}.brand-lockup .brand-word small{font-size:7px;margin-top:6px}}
+.master-list{top:72px}
+@media (max-width:900px){.topbar{min-height:0}.brand{min-height:56px}.brand-word{margin-top:2.6px}.nav-item{min-height:46px}.brand-lockup .brand-logo{height:30px}.brand-lockup{gap:10px}.brand-lockup .brand-word strong{font-size:19px}.brand-lockup .brand-word small{font-size:7px;margin-top:6px}}
 @media (max-width:520px){.brand-lockup .brand-word small{display:none}.brand-lockup .brand-word strong{gap:.06em;line-height:1}.brand-lockup .brand-logo{height:34px}}
 
 /* ---------- 23. Plant Now (Phase 3.0.C) ---------- */
@@ -807,13 +807,13 @@ body.status-modal-open,.status-modal-open{overflow:hidden}
 .session-oee-head h3{font-size:16px}
 .session-oee-grid{display:grid;grid-template-columns:auto minmax(0,1fr);gap:20px;align-items:center}
 .session-oee-visual-wrap{flex:none}
-.session-oee-visual{position:relative;width:190px;height:190px;margin:0 auto}
+.session-oee-visual{position:relative;width:240px;height:240px;margin:0 auto}
 .session-oee-visual svg{width:100%;height:100%;display:block}
-.session-oee-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;pointer-events:none}
-.session-oee-center strong{font-family:var(--fig);font-weight:600;font-size:30px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.session-oee-center{position:absolute;inset:0;width:88px;height:88px;margin:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;pointer-events:none;text-align:center}
+.session-oee-center strong{font-family:var(--fig);font-weight:600;font-size:30px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.01em;white-space:nowrap}
 .session-oee-center span{font-size:10px;letter-spacing:.08em;color:var(--text-3)}
-.session-oee-state{margin-top:4px;padding:2px 8px;font-size:10px;font-weight:600;letter-spacing:.03em;border-radius:1px}
-.session-oee-legend{width:190px;margin:10px auto 0}
+.session-oee-state{margin-top:3px;padding:2px 9px;font-size:10px;font-weight:600;letter-spacing:.03em;border-radius:1px;white-space:nowrap}
+.session-oee-legend{width:240px;margin:12px auto 0}
 .session-oee-legend>div{grid-template-columns:11px 1fr auto;font-size:13px;padding:5px 0}
 .session-oee-legend b{font-family:var(--fig);font-weight:600;font-variant-numeric:tabular-nums}
 .session-metric-pills{display:grid;gap:8px}
