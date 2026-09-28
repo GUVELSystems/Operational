@@ -1,4 +1,4 @@
-> **Current release: Phase 3.2.D — Kiosk automatic Start/Finish round-trip.** See `docs/PHASE_3_2_D_KIOSK_AUTO_START_FINISH.md`.
+> **Current release: Phase 3.2.F — QR fixed, multiple scrap/downtime lines, cursor survives Full Screen everywhere, Kiosk Full Screen.** See `docs/PHASE_3_2_E_QR_MULTILINE_CURSOR_FULLSCREEN.md`.
 
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard

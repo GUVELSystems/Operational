@@ -141,7 +141,8 @@ async function kioskVerifyPin(personId,pin){
 /* Shared supervisor gate used by every sensitive kiosk action. */
 function kioskAskSupervisor(host,{title,body,confirmLabel='Confirm',onConfirm,onCancel}){
   const supervisors=(kioskState.personnel||[]).filter(p=>p.role==='Supervisor'&&p.is_active);
-  host.innerHTML=`<div class="kiosk-gate"><div class="kiosk-gate-card">
+  const content=document.getElementById('kioskContent')||host;
+  content.innerHTML=`<div class="kiosk-gate"><div class="kiosk-gate-card">
     <h2>${escapeHtml(title)}</h2><p>${escapeHtml(body)}</p>
     <label>Supervisor<select id="kioskGateSup">${supervisors.length?supervisors.map(p=>`<option value="${p.id}">${escapeHtml(personnelFullName(p))}</option>`).join(''):'<option value="">No supervisors registered</option>'}</select></label>
     <label>PIN<input id="kioskGatePin" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>
@@ -168,7 +169,12 @@ async function renderFloorKiosk(code){
   document.body.classList.add('app-active');
   let host=document.getElementById('kioskRoot');
   if(!host){host=document.createElement('div');host.id='kioskRoot';document.body.appendChild(host);}
-  host.innerHTML='<div class="kiosk-loading">Loading machine…</div>';
+  /* Phase 3.2.F — #kioskRoot is the Full Screen target and is never itself rewritten (so the
+     custom cursor, re-parented into it while in Full Screen, survives every redraw); every
+     screen actually renders into the stable #kioskContent child instead. */
+  let content=document.getElementById('kioskContent');
+  if(!content){content=document.createElement('div');content.id='kioskContent';host.appendChild(content);}
+  content.innerHTML='<div class="kiosk-loading">Loading machine…</div>';
   const [mRes,pRes,scRes,dcRes,ctRes,shRes]=await Promise.all([
     sb.from('machines').select('id,code,name').eq('company_id',activeCompanyId).eq('code',code).maybeSingle(),
     sb.from('personnel').select('id,employee_id,first_name,last_name,role,is_active,badge_code').eq('company_id',activeCompanyId).eq('is_active',true),
@@ -177,8 +183,8 @@ async function renderFloorKiosk(code){
     sb.from('operation_machine_cycle_times').select('operation_id,part_number_id,machine_id,cycle_time_seconds').eq('company_id',activeCompanyId),
     sb.from('shifts').select('id,code,name,start_time,end_time,excluded_planned_minutes').eq('company_id',activeCompanyId)
   ]);
-  if(mRes.error||!mRes.data){host.innerHTML=`<div class="kiosk-loading"><h1>Machine not found</h1><p>No machine with code "${escapeHtml(code)}" in this company. Check the link on this device.</p></div>`;return;}
-  kioskState={machine:mRes.data,personnel:pRes.data||[],scrapCatalog:scRes.data||[],downtimeCatalog:dcRes.data||[],cycleTimes:(ctRes.data||[]).map(x=>({...x,key:`${x.part_number_id}|${x.operation_id}|${x.machine_id}`})),shifts:shRes.data||[],session:null,hours:[],operator:null,scrapLine:null,downtimeLine:null,pendingOverride:null};
+  if(mRes.error||!mRes.data){content.innerHTML=`<div class="kiosk-loading"><h1>Machine not found</h1><p>No machine with code "${escapeHtml(code)}" in this company. Check the link on this device.</p></div>`;return;}
+  kioskState={machine:mRes.data,personnel:pRes.data||[],scrapCatalog:scRes.data||[],downtimeCatalog:dcRes.data||[],cycleTimes:(ctRes.data||[]).map(x=>({...x,key:`${x.part_number_id}|${x.operation_id}|${x.machine_id}`})),shifts:shRes.data||[],session:null,hours:[],operator:null,scrapLines:[],downtimeLines:[],editingHourIso:null,draftQty:null,pendingOverride:null};
   const savedOp=sessionStorage.getItem('kiosk_operator_'+kioskState.machine.id);
   if(savedOp){const p=kioskState.personnel.find(x=>x.id===savedOp);if(p)kioskState.operator=p;}
   await kioskReloadSession();
@@ -198,6 +204,10 @@ function kioskCycleSeconds(session){
   const found=(kioskState.cycleTimes||[]).find(x=>x.key===key);
   return Number(found?.cycle_time_seconds||session.operations?.ideal_cycle_time_seconds||0)||null;
 }
+function kioskToggleFullscreen(){
+  if(document.fullscreenElement){document.exitFullscreen?.();return;}
+  document.getElementById('kioskRoot')?.requestFullscreen?.().catch(()=>{});
+}
 function kioskExit(){
   const host=document.getElementById('kioskRoot');
   kioskAskSupervisor(host,{title:'Exit Floor Kiosk',body:'A supervisor must authorize leaving this screen.',confirmLabel:'Exit',
@@ -206,15 +216,18 @@ function kioskExit(){
 }
 function kioskDraw(){
   const host=document.getElementById('kioskRoot');if(!host)return;
+  const content=document.getElementById('kioskContent');if(!content)return;
   const K=kioskState,m=K.machine;
   const exitBtn=`<button type="button" class="kiosk-exit" id="kioskExitBtn">Exit</button>`;
+  const fullscreenBtn=`<button type="button" class="kiosk-fullscreen" id="kioskFullscreenBtn">${document.fullscreenElement?'⛶ Exit Full Screen':'⛶ Full Screen'}</button>`;
   if(!K.operator){
-    host.innerHTML=`<div class="kiosk-shell"><div class="kiosk-topline"><span>${escapeHtml(m.code)} — ${escapeHtml(m.name||'')}</span>${exitBtn}</div>
+    content.innerHTML=`<div class="kiosk-shell"><div class="kiosk-topline"><span>${escapeHtml(m.code)} — ${escapeHtml(m.name||'')}</span>${fullscreenBtn}${exitBtn}</div>
       <div class="kiosk-scan"><h1>Scan your badge</h1><p>Or enter your badge code below.</p>
         <form id="kioskScanForm"><input id="kioskScanInput" autocomplete="off" autofocus placeholder="Badge code"><button type="submit" class="primary">Continue</button></form>
         <div class="kiosk-scan-msg" id="kioskScanMsg"></div>
       </div></div>`;
     document.getElementById('kioskExitBtn').onclick=kioskExit;
+    document.getElementById('kioskFullscreenBtn')?.addEventListener('click',kioskToggleFullscreen);
     const input=document.getElementById('kioskScanInput');input.focus();
     document.getElementById('kioskScanForm').onsubmit=e=>{
       e.preventDefault();
@@ -226,11 +239,12 @@ function kioskDraw(){
     return;
   }
   if(!K.session){
-    host.innerHTML=`<div class="kiosk-shell"><div class="kiosk-topline"><span>${escapeHtml(m.code)} — ${escapeHtml(m.name||'')}</span>${exitBtn}</div>
+    content.innerHTML=`<div class="kiosk-shell"><div class="kiosk-topline"><span>${escapeHtml(m.code)} — ${escapeHtml(m.name||'')}</span>${fullscreenBtn}${exitBtn}</div>
       <div class="kiosk-idle"><h1>No active session</h1><p>Ask your supervisor to start production on this machine.</p>
       <button type="button" class="secondary" id="kioskSwitchOperator">Not ${escapeHtml(personnelFullName(K.operator))}?</button>
       <button type="button" class="primary" id="kioskStartBtn">Supervisor: Start Session</button></div></div>`;
     document.getElementById('kioskExitBtn').onclick=kioskExit;
+    document.getElementById('kioskFullscreenBtn')?.addEventListener('click',kioskToggleFullscreen);
     document.getElementById('kioskSwitchOperator').onclick=()=>{K.operator=null;sessionStorage.removeItem('kiosk_operator_'+m.id);kioskDraw();};
     document.getElementById('kioskStartBtn').onclick=()=>{
       kioskAskSupervisor(host,{title:'Start Session',body:'This opens Start Production for this machine only. Once started, this device returns here automatically.',confirmLabel:'Continue',
@@ -238,7 +252,7 @@ function kioskDraw(){
     };
     return;
   }
-  const s=K.session;
+const s=K.session;
   /* Phase 3.2.C — always target the FIRST hour not yet logged, in shift order, instead of
      whatever hour the wall clock says "now" is. If more than one hour is waiting, say so plainly
      instead of quietly jumping ahead to the current one. */
@@ -248,24 +262,39 @@ function kioskDraw(){
   const currentSlot=pending.length?pending[0]:slots[slots.length-1];
   const currentIso=currentSlot?currentSlot.start.toISOString():null;
   const existing=currentIso?K.hours.find(h=>new Date(h.hour_slot).toISOString()===currentIso):null;
+  /* Phase 3.2.E — an hour can have several scrap or downtime reasons (e.g. 1 pza by startup +
+     1 pza by marks). Lines are tracked as lists; they reset to what's already saved whenever the
+     target hour changes, so switching hours doesn't carry over an in-progress edit by mistake. */
+  if(K.editingHourIso!==currentIso){
+    K.scrapLines=(existing?.scrap_events||[]).map(x=>({scrap_catalog_id:x.scrap_catalog_id,quantity:x.quantity,reason:x.reason||null}));
+    K.downtimeLines=(existing?.downtime_events||[]).map(x=>({downtime_catalog_id:x.downtime_catalog_id,minutes:x.minutes,event_type:x.event_type,reason:x.reason||null}));
+    K.editingHourIso=currentIso;
+    K.draftQty=null;
+  }
   const pendingNotice=pending.length>1?`<div class="kiosk-pending"><strong>Pendiente registrar:</strong> ${pending.map(sl=>slotLabel(sl)).join(', ')}</div>`:'';
   const recent=K.hours.slice(-4).reverse();
   const cycle=kioskCycleSeconds(s);
   const scrapOptions=matchingScrapCatalog(K.scrapCatalog,s.part_number_id,s.operation_id);
-  host.innerHTML=`<div class="kiosk-shell"><div class="kiosk-topline"><span>${escapeHtml(m.code)} — ${escapeHtml(m.name||'')}</span><span class="kiosk-operator">${escapeHtml(personnelFullName(K.operator))} <button type="button" class="link-btn" id="kioskSwitchOperator2">Not you?</button></span>${exitBtn}</div>
+  const scrapDefectName=id=>(scrapOptions.find(x=>x.id===id)||{}).defect||'Unknown defect';
+  const dtReasonName=id=>(K.downtimeCatalog.find(x=>x.id===id)||{}).downtime||'Unknown reason';
+  const scrapListHtml=K.scrapLines.map((l,i)=>`<div class="kiosk-line"><span>${escapeHtml(scrapDefectName(l.scrap_catalog_id))} × ${l.quantity}</span><button type="button" class="link-btn danger-text" data-remove-scrap="${i}">Remove</button></div>`).join('');
+  const dtListHtml=K.downtimeLines.map((l,i)=>`<div class="kiosk-line"><span>${escapeHtml(dtReasonName(l.downtime_catalog_id))} — ${l.minutes} min (${l.event_type})</span><button type="button" class="link-btn danger-text" data-remove-downtime="${i}">Remove</button></div>`).join('');
+  content.innerHTML=`<div class="kiosk-shell"><div class="kiosk-topline"><span>${escapeHtml(m.code)} — ${escapeHtml(m.name||'')}</span><span class="kiosk-operator">${escapeHtml(personnelFullName(K.operator))} <button type="button" class="link-btn" id="kioskSwitchOperator2">Not you?</button></span>${fullscreenBtn}${exitBtn}</div>
     <div class="kiosk-body">
       ${pendingNotice}
       <div class="kiosk-context"><div><span>Part</span><strong>${escapeHtml(s.part_numbers?.part_number||'—')}</strong></div><div><span>Operation</span><strong>${escapeHtml(s.operations?.operation_number||'—')}</strong></div><div><span>Lot</span><strong>${escapeHtml(s.lot_number||'—')}</strong></div></div>
       <h1 class="kiosk-hour">${currentSlot?slotLabel(currentSlot):'—'}</h1>
       <form id="kioskEntryForm" class="kiosk-entry">
-        <label class="kiosk-qty-label">Good pieces this hour<input id="kioskQty" type="number" min="0" step="1" inputmode="numeric" class="kiosk-qty-input" value="${existing?hourRowSplit(existing).qty:''}" required></label>
+        <label class="kiosk-qty-label">Good pieces this hour<input id="kioskQty" type="number" min="0" step="1" inputmode="numeric" class="kiosk-qty-input" value="${K.draftQty!=null?K.draftQty:(existing?hourRowSplit(existing).qty:'')}" required></label>
         ${cycle?`<p class="kiosk-hint">Expected up to ~${Math.floor(((currentSlot.end-currentSlot.start)/1000)/cycle)} pcs this hour at the part's cycle time.</p>`:''}
         <div class="kiosk-optional">
-          <button type="button" class="secondary" id="kioskAddScrap">${K.scrapLine?'Edit scrap':'+ Report scrap'}</button>
-          <button type="button" class="secondary" id="kioskAddDowntime">${K.downtimeLine?'Edit downtime':'+ Report downtime'}</button>
+          <button type="button" class="secondary" id="kioskAddScrap">+ Report scrap</button>
+          <button type="button" class="secondary" id="kioskAddDowntime">+ Report downtime</button>
         </div>
-        <div id="kioskScrapBox">${K.scrapLine?`<div class="kiosk-line">Scrap: ${escapeHtml((scrapOptions.find(x=>x.id===K.scrapLine.scrap_catalog_id)||{}).defect||'')} × ${K.scrapLine.quantity}</div>`:''}</div>
-        <div id="kioskDowntimeBox">${K.downtimeLine?`<div class="kiosk-line">Downtime: ${escapeHtml((K.downtimeCatalog.find(x=>x.id===K.downtimeLine.downtime_catalog_id)||{}).downtime||'')} — ${K.downtimeLine.minutes} min (${K.downtimeLine.event_type})</div>`:''}</div>
+        <div id="kioskScrapList" class="kiosk-line-list">${scrapListHtml}</div>
+        <div id="kioskScrapBox"></div>
+        <div id="kioskDowntimeList" class="kiosk-line-list">${dtListHtml}</div>
+        <div id="kioskDowntimeBox"></div>
         <div id="kioskEntryMsg" class="kiosk-msg"></div>
         <button type="submit" class="primary kiosk-save">Save Hour</button>
       </form>
@@ -274,6 +303,8 @@ function kioskDraw(){
     <div class="kiosk-footer"><button type="button" class="link-btn" id="kioskFinishBtn">Supervisor: Finish Session</button></div>
   </div>`;
   document.getElementById('kioskExitBtn').onclick=kioskExit;
+  document.getElementById('kioskFullscreenBtn')?.addEventListener('click',kioskToggleFullscreen);
+  document.getElementById('kioskQty').oninput=e=>{K.draftQty=e.target.value;};
   document.getElementById('kioskSwitchOperator2').onclick=()=>{K.operator=null;sessionStorage.removeItem('kiosk_operator_'+m.id);kioskDraw();};
   document.getElementById('kioskFinishBtn').onclick=()=>{
     const hasHours=K.hours.length>0;
@@ -282,42 +313,52 @@ function kioskDraw(){
       confirmLabel:'Finish Session',
       onConfirm:async(supervisor)=>{
         if(!hasHours){window.location.href=window.location.pathname+'?openMachine='+encodeURIComponent(m.id)+'&kioskReturn='+encodeURIComponent(m.code);return;}
-        host.innerHTML='<div class="kiosk-loading">Finishing session…</div>';
+        content.innerHTML='<div class="kiosk-loading">Finishing session…</div>';
         try{
           await consolidateSessionHours(s,{operator_name:personnelFullName(K.operator),supervisor_name:personnelFullName(supervisor)});
           const fr=await sb.from('machine_production_sessions').update({status:'COMPLETED',finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);
           if(fr.error)throw new Error(fr.error.message);
           await kioskReloadSession();
-          K.scrapLine=null;K.downtimeLine=null;
+          K.scrapLines=[];K.downtimeLines=[];K.editingHourIso=null;K.draftQty=null;
           kioskDraw();
-        }catch(err){host.innerHTML=`<div class="kiosk-loading"><h1>Could not finish session</h1><p>${escapeHtml(err.message)}</p><button type="button" class="primary" id="kioskFinishRetry">Back</button></div>`;document.getElementById('kioskFinishRetry').onclick=kioskDraw;}
+        }catch(err){content.innerHTML=`<div class="kiosk-loading"><h1>Could not finish session</h1><p>${escapeHtml(err.message)}</p><button type="button" class="primary" id="kioskFinishRetry">Back</button></div>`;document.getElementById('kioskFinishRetry').onclick=kioskDraw;}
       },
       onCancel:kioskDraw});
   };
   document.getElementById('kioskAddScrap').onclick=()=>{
     const box=document.getElementById('kioskScrapBox');
-    box.innerHTML=`<div class="kiosk-line-form"><select id="kioskScrapCat">${scrapOptions.length?scrapOptions.map(x=>`<option value="${x.id}" ${K.scrapLine?.scrap_catalog_id===x.id?'selected':''}>${escapeHtml(x.code)}${x.part_number_id==null?' (General)':''} — ${escapeHtml(x.defect)}</option>`).join(''):'<option value="">No defects configured</option>'}</select><input id="kioskScrapQty" type="number" min="1" step="1" placeholder="Qty" value="${K.scrapLine?.quantity||''}"><button type="button" class="primary" id="kioskScrapSave">Set</button>${K.scrapLine?'<button type="button" class="link-btn danger-text" id="kioskScrapClear">Remove</button>':''}</div>`;
-    document.getElementById('kioskScrapSave').onclick=()=>{const id=document.getElementById('kioskScrapCat').value,qty=Number(document.getElementById('kioskScrapQty').value);if(!id||!qty){return;}K.scrapLine={scrap_catalog_id:id,quantity:qty,reason:null};kioskDraw();};
-    document.getElementById('kioskScrapClear')?.addEventListener('click',()=>{K.scrapLine=null;kioskDraw();});
+    box.innerHTML=`<div class="kiosk-line-form"><select id="kioskScrapCat">${scrapOptions.length?`<option value="">Select defect</option>${scrapOptions.map(x=>`<option value="${x.id}">${escapeHtml(x.code)}${x.part_number_id==null?' (General)':''} — ${escapeHtml(x.defect)}</option>`).join('')}`:'<option value="">No defects configured</option>'}</select><input id="kioskScrapQty" type="number" min="1" step="1" placeholder="Qty"><button type="button" class="primary" id="kioskScrapSave">Add</button><button type="button" class="link-btn" id="kioskScrapCancel">Cancel</button></div>`;
+    document.getElementById('kioskScrapSave').onclick=()=>{
+      const id=document.getElementById('kioskScrapCat').value,qty=Number(document.getElementById('kioskScrapQty').value);
+      if(!id||!qty)return;
+      K.scrapLines.push({scrap_catalog_id:id,quantity:qty,reason:null});kioskDraw();
+    };
+    document.getElementById('kioskScrapCancel').onclick=()=>{box.innerHTML='';};
   };
   document.getElementById('kioskAddDowntime').onclick=()=>{
     const box=document.getElementById('kioskDowntimeBox');
-    box.innerHTML=`<div class="kiosk-line-form"><select id="kioskDtCat">${K.downtimeCatalog.map(x=>`<option value="${x.id}" ${K.downtimeLine?.downtime_catalog_id===x.id?'selected':''}>${escapeHtml(x.code)} — ${escapeHtml(x.downtime)}</option>`).join('')}</select><input id="kioskDtMin" type="number" min="1" step="1" placeholder="Minutes" value="${K.downtimeLine?.minutes||''}"><select id="kioskDtType"><option value="Unplanned" ${K.downtimeLine?.event_type==='Unplanned'?'selected':''}>Unplanned</option><option value="Planned" ${K.downtimeLine?.event_type==='Planned'?'selected':''}>Planned</option></select><button type="button" class="primary" id="kioskDtSave">Set</button>${K.downtimeLine?'<button type="button" class="link-btn danger-text" id="kioskDtClear">Remove</button>':''}</div>`;
-    document.getElementById('kioskDtSave').onclick=()=>{const id=document.getElementById('kioskDtCat').value,min=Number(document.getElementById('kioskDtMin').value),type=document.getElementById('kioskDtType').value;if(!id||!min){return;}K.downtimeLine={downtime_catalog_id:id,minutes:min,event_type:type,reason:null};kioskDraw();};
-    document.getElementById('kioskDtClear')?.addEventListener('click',()=>{K.downtimeLine=null;kioskDraw();});
+    box.innerHTML=`<div class="kiosk-line-form"><select id="kioskDtCat"><option value="">Select reason</option>${K.downtimeCatalog.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.downtime)}</option>`).join('')}</select><input id="kioskDtMin" type="number" min="1" step="1" placeholder="Minutes"><select id="kioskDtType"><option value="Unplanned">Unplanned</option><option value="Planned">Planned</option></select><button type="button" class="primary" id="kioskDtSave">Add</button><button type="button" class="link-btn" id="kioskDtCancel">Cancel</button></div>`;
+    document.getElementById('kioskDtSave').onclick=()=>{
+      const id=document.getElementById('kioskDtCat').value,min=Number(document.getElementById('kioskDtMin').value),type=document.getElementById('kioskDtType').value;
+      if(!id||!min)return;
+      K.downtimeLines.push({downtime_catalog_id:id,minutes:min,event_type:type,reason:null});kioskDraw();
+    };
+    document.getElementById('kioskDtCancel').onclick=()=>{box.innerHTML='';};
   };
+  document.querySelectorAll('[data-remove-scrap]').forEach(b=>b.onclick=()=>{K.scrapLines.splice(Number(b.dataset.removeScrap),1);kioskDraw();});
+  document.querySelectorAll('[data-remove-downtime]').forEach(b=>b.onclick=()=>{K.downtimeLines.splice(Number(b.dataset.removeDowntime),1);kioskDraw();});
   document.getElementById('kioskEntryForm').onsubmit=async e=>{
     e.preventDefault();
     const msg=document.getElementById('kioskEntryMsg'),btn=host.querySelector('.kiosk-save');
     const qty=Number(document.getElementById('kioskQty').value);
     if(!Number.isInteger(qty)||qty<0){msg.textContent='Enter a whole number of good pieces.';return;}
-    const scrapQty=K.scrapLine?.quantity||0;
-    if(scrapQty>qty){msg.textContent='Scrap cannot exceed good pieces for this hour.';return;}
+    const scrapTotal=K.scrapLines.reduce((a,l)=>a+(l.quantity||0),0);
+    if(scrapTotal>qty){msg.textContent='Total scrap cannot exceed good pieces for this hour.';return;}
     const doSave=async()=>{
       btn.disabled=true;btn.textContent='Saving…';
       try{
-        await kioskSaveHour(currentIso,existing?.id||null,qty,K.scrapLine?[K.scrapLine]:[],K.downtimeLine?[K.downtimeLine]:[]);
-        K.scrapLine=null;K.downtimeLine=null;
+        await kioskSaveHour(currentIso,existing?.id||null,qty,K.scrapLines,K.downtimeLines);
+        K.editingHourIso=null;K.draftQty=null;
         await kioskReloadSession();
         msg.textContent='';kioskDraw();
       }catch(err){msg.textContent=err.message;btn.disabled=false;btn.textContent='Save Hour';}
@@ -333,6 +374,8 @@ function kioskDraw(){
     await doSave();
   };
 }
+
+
 async function kioskSaveHour(hourIso,existingId,qty,scrap,downtime){
   const s=kioskState.session;
   const payload={company_id:activeCompanyId,production_date:new Date(hourIso).toISOString().slice(0,10),shift_id:s.shift_id,lot_number:s.lot_number,customer_id:s.customer_id,part_number_id:s.part_number_id,machine_id:s.machine_id,operation_id:s.operation_id,operator_name:personnelFullName(kioskState.operator),supervisor_name:s.supervisor_id?(kioskState.personnel.find(p=>p.id===s.supervisor_id)?personnelFullName(kioskState.personnel.find(p=>p.id===s.supervisor_id)):null):null,production_quantity:qty,confirmed:true,confirmed_at:new Date().toISOString(),session_id:s.id,hour_slot:hourIso};
@@ -1372,7 +1415,17 @@ function loadScriptOnce(src){
     const el=document.createElement('script');el.src=src;el.onload=()=>resolve();el.onerror=()=>reject(new Error('Could not load '+src));document.head.appendChild(el);
   });
 }
-async function ensureQrLib(){if(!window.QRCode)await loadScriptOnce('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js');}
+async function ensureQrLib(){if(!window.qrcode)await loadScriptOnce('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js');}
+/* qrcode-generator ships its actual source file at the package root (verified against the
+   published npm tarball), unlike some QR packages whose CDN convention points at a build/
+   folder that isn't actually published — which is why the QR never loaded before. Returns a
+   ready-to-insert <svg> string, sized by cellSize (px per module) and margin (modules). */
+function buildQrSvg(text,cellSize,margin){
+  const qr=window.qrcode(0,'M');
+  qr.addData(text);
+  qr.make();
+  return qr.createSvgTag({cellSize:cellSize||4,margin:margin??2});
+}
 function kioskLinkFor(code){return `${window.location.origin}${window.location.pathname}?kiosk=${encodeURIComponent(code)}`;}
 function machinePrintDoc(machine,bodyHtml,caption){
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(machine.code)} — GUVEL</title>
@@ -1402,10 +1455,10 @@ function machinePrintDoc(machine,bodyHtml,caption){
 }
 async function printMachineQr(machine){
   await ensureQrLib();
-  const dataUrl=await QRCode.toDataURL(kioskLinkFor(machine.code),{width:260,margin:1,color:{dark:'#0F1B2D',light:'#FFFFFF'}});
+  const svg=buildQrSvg(kioskLinkFor(machine.code),8,2);
   const w=window.open('','_blank');
   if(!w){alert('Please allow pop-ups to print.');return;}
-  w.document.write(machinePrintDoc(machine,`<img src="${dataUrl}" alt="QR code">`,'Scan to open this machine\u2019s Floor Kiosk'));
+  w.document.write(machinePrintDoc(machine,svg,'Scan to open this machine\u2019s Floor Kiosk'));
   w.document.close();
 }
 function printMachineBarcode(machine){
@@ -1444,9 +1497,9 @@ function openMachineProfile(id){
   });
   document.getElementById('printMachineQrBtn')?.addEventListener('click',()=>printMachineQr(m));
   document.getElementById('printMachineBarcodeBtn')?.addEventListener('click',()=>printMachineBarcode(m));
-  ensureQrLib().then(()=>QRCode.toDataURL(kioskLinkFor(m.code),{width:150,margin:1,color:{dark:'#0F1B2D',light:'#FFFFFF'}})).then(url=>{
-    const holder=document.getElementById('machineQrHolder');if(holder)holder.innerHTML=`<img src="${url}" alt="QR code for ${escAttr(m.code)}" width="150" height="150">`;
-  }).catch(()=>{const holder=document.getElementById('machineQrHolder');if(holder)holder.innerHTML='<span class="muted">QR unavailable offline.</span>';});
+  ensureQrLib().then(()=>{
+    const holder=document.getElementById('machineQrHolder');if(holder)holder.innerHTML=buildQrSvg(kioskLinkFor(m.code),4,2);
+  }).catch(()=>{const holder=document.getElementById('machineQrHolder');if(holder)holder.innerHTML='<span class="muted">QR unavailable. Check your internet connection and try Refresh.</span>';});
 }
 
 function closeMachineProfile(){
@@ -2521,6 +2574,22 @@ window.addEventListener('DOMContentLoaded',()=>{
   bindAuth();
   bootstrapSession();
 });
+/* Phase 3.2.E — whatever element is currently in native Full Screen (Dashboard's #app, Plant
+   Now's live panel, or the Kiosk root) temporarily adopts the cursor dot as a child for the
+   duration, since a fullscreened element only renders its own descendants. Restored to its
+   original spot on exit. Also refreshes the Kiosk's Full Screen button label and keeps the
+   Dashboard's own dataset flag in sync so its fullscreen CSS still applies correctly. */
+(()=>{
+  const cursor=document.getElementById('laserCursor');
+  const home={parent:cursor?.parentNode,next:cursor?.nextSibling};
+  document.addEventListener('fullscreenchange',()=>{
+    if(cursor){
+      if(document.fullscreenElement)document.fullscreenElement.appendChild(cursor);
+      else if(home.parent)home.parent.insertBefore(cursor,home.next);
+    }
+    if(typeof kioskState!=='undefined'&&kioskState&&document.getElementById('kioskRoot')&&typeof kioskDraw==='function')kioskDraw();
+  });
+})();
 /* GUVEL cursor — desktop only.
    Phase 3.1.F: was setting style.left/top on every single mousemove event (triggers layout on
    each one); now coalesces to one requestAnimationFrame per frame and moves the dot with a
@@ -2639,13 +2708,17 @@ function plantHourRowTotals(row){return {qty:row.production_quantity||0,scrap:(r
 async function plantOpenMachineLive(machineId,list){
   const entry=(list||[]).find(x=>x.m.id===machineId);const machine=entry?.m||(dashboardState.machines||[]).find(x=>x.id===machineId);if(!machine)return;
   let host=document.getElementById('plantLiveModal');if(!host){host=document.createElement('div');host.id='plantLiveModal';host.className='plant-live-modal';host.hidden=true;document.body.appendChild(host);}
-  const close=()=>{host.hidden=true;host.innerHTML='';clearInterval(host.__timer);document.removeEventListener('keydown',onEsc);};
+  /* Phase 3.2.F — same stable-shell pattern as Kiosk: #plantLiveModal is the Full Screen target
+     and is never rewritten, so a cursor re-parented into it survives every 30s auto-refresh. */
+  let content=document.getElementById('plantLiveContent');
+  if(!content){content=document.createElement('div');content.id='plantLiveContent';host.appendChild(content);}
+  const close=()=>{host.hidden=true;content.innerHTML='';clearInterval(host.__timer);document.removeEventListener('keydown',onEsc);if(document.fullscreenElement===host)document.exitFullscreen?.();};
   const onEsc=e=>{if(e.key==='Escape')close();};
   const draw=async()=>{
     const s=entry?.s||null;
     const state=entry?.state||'idle';
     if(!s){
-      host.innerHTML=`<div class="status-modal-backdrop" data-close="1"></div><section class="plant-live-body" role="dialog" aria-modal="true" aria-labelledby="plantLiveTitle"><div class="plant-live-head"><div><div class="eyebrow">PLANT NOW · LIVE</div><h2 id="plantLiveTitle">${escapeHtml(machine.code)} — ${escapeHtml(machine.name||'Machine')}</h2></div><div class="plant-live-head-actions"><button type="button" class="secondary" id="plantLiveFullscreen">⛶ Full Screen</button><button type="button" class="secondary" data-close="1" aria-label="Close">✕ Close</button></div></div><div class="plant-live-idle"><p>This machine has no active production session.</p><button type="button" class="primary" id="plantLiveOpenStatus">Open in Production</button></div></section>`;
+      content.innerHTML=`<div class="status-modal-backdrop" data-close="1"></div><section class="plant-live-body" role="dialog" aria-modal="true" aria-labelledby="plantLiveTitle"><div class="plant-live-head"><div><div class="eyebrow">PLANT NOW · LIVE</div><h2 id="plantLiveTitle">${escapeHtml(machine.code)} — ${escapeHtml(machine.name||'Machine')}</h2></div><div class="plant-live-head-actions"><button type="button" class="secondary" id="plantLiveFullscreen">⛶ Full Screen</button><button type="button" class="secondary" data-close="1" aria-label="Close">✕ Close</button></div></div><div class="plant-live-idle"><p>This machine has no active production session.</p><button type="button" class="primary" id="plantLiveOpenStatus">Open in Production</button></div></section>`;
     }else{
       const r=await sb.from('production_captures').select('id,hour_slot,production_quantity,scrap_events(quantity),downtime_events(minutes,event_type)').eq('session_id',s.id).eq('company_id',activeCompanyId).not('hour_slot','is',null).order('hour_slot');
       const hours=(r.data||[]).slice().sort((a,b)=>a.hour_slot<b.hour_slot?-1:1);
@@ -2660,7 +2733,7 @@ async function plantOpenMachineLive(machineId,list){
       const rowsHtml=hours.map(h=>{const rt=hourRowSplit(h);const iso=new Date(h.hour_slot).toISOString();const slot=slotByIso.get(iso);const label=slot?slotLabel(slot):(()=>{const d=new Date(h.hour_slot),pad=n=>String(n).padStart(2,'0'),e=new Date(d.getTime()+3600000);return `${pad(d.getHours())}:${pad(d.getMinutes())} – ${pad(e.getHours())}:${pad(e.getMinutes())}`;})();
         return `<div class="hour-row"><div class="hour-row-main"><strong>${label}</strong><span class="hour-row-stats"><b>${rt.qty}</b> good<span>·</span><b class="${rt.scrap?'is-scrap':''}">${rt.scrap}</b> scrap<span>·</span><b class="${rt.down?'is-down':''}">${rt.down.toFixed(0)}</b> min down</span></div></div>`;}).join('')||'<div class="plant-live-empty">No hours logged yet with Real Time.</div>';
       const shiftWin=shiftWindowFor(s);
-      host.innerHTML=`<div class="status-modal-backdrop" data-close="1"></div><section class="plant-live-body plant-live-dashboard" role="dialog" aria-modal="true" aria-labelledby="plantLiveTitle">
+      content.innerHTML=`<div class="status-modal-backdrop" data-close="1"></div><section class="plant-live-body plant-live-dashboard" role="dialog" aria-modal="true" aria-labelledby="plantLiveTitle">
         <div class="plant-live-head"><div><div class="eyebrow">PLANT NOW · LIVE</div><h2 id="plantLiveTitle">${escapeHtml(machine.code)} — ${escapeHtml(machine.name||'Machine')}</h2><span class="plant-live-state ${state==='run'?'is-run':state==='watch'?'is-watch':''}">${state==='idle'?'IDLE':state==='watch'?'BELOW TARGET':'RUNNING'}</span></div><div class="plant-live-head-actions"><button type="button" class="secondary" id="plantLiveFullscreen">⛶ Full Screen</button><button type="button" class="secondary" data-close="1" aria-label="Close">✕ Close</button></div></div>
         <div class="status-active-detail"><div><span>Customer</span><strong>${escapeHtml(s.customers?.name||'—')}</strong></div><div><span>Part Number</span><strong>${escapeHtml(s.part_numbers?.part_number||'—')}</strong></div><div><span>Operation</span><strong>${escapeHtml(s.operations?.operation_number||'—')} ${escapeHtml(s.operations?.operation_name||'')}</strong></div><div><span>Lot</span><strong>${escapeHtml(s.lot_number||'—')}</strong></div><div><span>Shift</span><strong>${escapeHtml(s.shifts?.code||'—')}${shiftWin?` (${formatClock(shiftWin.start)} – ${formatClock(shiftWin.end)})`:''}</strong></div><div><span>Started</span><strong>${s.started_at?new Date(s.started_at).toLocaleString():'—'}</strong></div><div><span>Operator</span><strong>${escapeHtml(personName(s.operator_id)||'—')}</strong></div><div><span>Supervisor</span><strong>${escapeHtml(personName(s.supervisor_id)||'—')}</strong></div></div>
 
