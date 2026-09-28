@@ -239,15 +239,22 @@ function kioskDraw(){
     return;
   }
   const s=K.session;
+  /* Phase 3.2.C — always target the FIRST hour not yet logged, in shift order, instead of
+     whatever hour the wall clock says "now" is. If more than one hour is waiting, say so plainly
+     instead of quietly jumping ahead to the current one. */
   const slots=realtimeSlotsFor(s,new Date());
-  const currentSlot=slots[slots.length-1];
+  const loggedIso=new Set(K.hours.map(h=>new Date(h.hour_slot).toISOString()));
+  const pending=slots.filter(sl=>!loggedIso.has(sl.start.toISOString()));
+  const currentSlot=pending.length?pending[0]:slots[slots.length-1];
   const currentIso=currentSlot?currentSlot.start.toISOString():null;
   const existing=currentIso?K.hours.find(h=>new Date(h.hour_slot).toISOString()===currentIso):null;
+  const pendingNotice=pending.length>1?`<div class="kiosk-pending"><strong>Pendiente registrar:</strong> ${pending.map(sl=>slotLabel(sl)).join(', ')}</div>`:'';
   const recent=K.hours.slice(-4).reverse();
   const cycle=kioskCycleSeconds(s);
   const scrapOptions=matchingScrapCatalog(K.scrapCatalog,s.part_number_id,s.operation_id);
   host.innerHTML=`<div class="kiosk-shell"><div class="kiosk-topline"><span>${escapeHtml(m.code)} — ${escapeHtml(m.name||'')}</span><span class="kiosk-operator">${escapeHtml(personnelFullName(K.operator))} <button type="button" class="link-btn" id="kioskSwitchOperator2">Not you?</button></span>${exitBtn}</div>
     <div class="kiosk-body">
+      ${pendingNotice}
       <div class="kiosk-context"><div><span>Part</span><strong>${escapeHtml(s.part_numbers?.part_number||'—')}</strong></div><div><span>Operation</span><strong>${escapeHtml(s.operations?.operation_number||'—')}</strong></div><div><span>Lot</span><strong>${escapeHtml(s.lot_number||'—')}</strong></div></div>
       <h1 class="kiosk-hour">${currentSlot?slotLabel(currentSlot):'—'}</h1>
       <form id="kioskEntryForm" class="kiosk-entry">
@@ -1012,30 +1019,6 @@ async function openPnProfile(id){
   if(!panel||!content){alert('Part Number Profile container is unavailable.');return;}
   panel.style.display='block';
 
-  const barcodeSvg=(raw)=>{
-    const value=String(raw||'').toUpperCase();
-    const patterns={
-      '0':'nnnwwnwnn','1':'wnnwnnnnw','2':'nnwwnnnnw','3':'wnwwnnnnn','4':'nnnwwnnnw','5':'wnnwwnnnn','6':'nnwwwnnnn','7':'nnnwnnwnw','8':'wnnwnnwnn','9':'nnwwnnwnn',
-      'A':'wnnnnwnnw','B':'nnwnnwnnw','C':'wnwnnwnnn','D':'nnnnwwnnw','E':'wnnnwwnnn','F':'nnwnwwnnn','G':'nnnnnwwnw','H':'wnnnnwwnn','I':'nnwnnwwnn','J':'nnnnwwwnn',
-      'K':'wnnnnnnww','L':'nnwnnnnww','M':'wnwnnnnwn','N':'nnnnwnnww','O':'wnnnwnnwn','P':'nnwnwnnwn','Q':'nnnnnnwww','R':'wnnnnnwwn','S':'nnwnnnwwn','T':'nnnnwnwwn',
-      'U':'wwnnnnnnw','V':'nwwnnnnnw','W':'wwwnnnnnn','X':'nwnnwnnnw','Y':'wwnnwnnnn','Z':'nwwnwnnnn','-':'nwnnnnwnw','.':'wwnnnnwnn',' ':'nwwnnnwnn','$':'nwnwnwnnn','/':'nwnwnnnwn','+':'nwnnnwnwn','%':'nnnwnwnwn','*':'nwnnwnwnn'
-    };
-    const safe=[...value].map(c=>patterns[c]?c:'-').join('');
-    const encoded='*'+safe+'*';
-    let x=12,bars='';
-    for(const ch of encoded){
-      const pattern=patterns[ch];
-      for(let i=0;i<pattern.length;i++){
-        const w=pattern[i]==='w'?3:1;
-        if(i%2===0) bars+=`<rect x="${x}" y="8" width="${w}" height="104" fill="#111"/>`;
-        x+=w;
-      }
-      x+=1;
-    }
-    const width=x+12;
-    return `<svg class="barcode-svg" xmlns="http://www.w3.org/2000/svg" width="${width}" height="145" viewBox="0 0 ${width} 145" role="img" aria-label="Code 39 barcode for ${escapeHtml(safe)}"><rect width="100%" height="100%" fill="#fff"/>${bars}<text x="${width/2}" y="137" text-anchor="middle" font-family="monospace" font-size="17" fill="#111">${escapeHtml(safe)}</text></svg>`;
-  };
-
   content.innerHTML=`
     <div class="section-title">
       <div><h2>${escapeHtml(p.part_number)}</h2><p>Operational master profile</p></div>
@@ -1049,7 +1032,7 @@ async function openPnProfile(id){
     </div>
     <div class="barcode-card">
       <div class="barcode-label">Código de Barras</div>
-      <div class="barcode barcode-container">${barcodeSvg(p.part_number)}</div>
+      <div class="barcode barcode-container">${code39BarcodeSvg(p.part_number)}</div>
       <code>${escapeHtml(p.part_number)}</code>
     </div>
     <div class="tabs profile-tabs">
@@ -1319,6 +1302,83 @@ async function loadMachines(){
   document.querySelectorAll('.editMachine').forEach(b=>b.onclick=()=>startMachineEdit(machineCache.find(x=>x.id===b.dataset.id)));
 }
 
+/* Phase 3.2.C — shared Code 39 barcode renderer (was duplicated inside the Part Number profile;
+   now also used by the Machine profile's printable QR/barcode card). */
+function code39BarcodeSvg(raw){
+  const value=String(raw||'').toUpperCase();
+  const patterns={
+    '0':'nnnwwnwnn','1':'wnnwnnnnw','2':'nnwwnnnnw','3':'wnwwnnnnn','4':'nnnwwnnnw','5':'wnnwwnnnn','6':'nnwwwnnnn','7':'nnnwnnwnw','8':'wnnwnnwnn','9':'nnwwnnwnn',
+    'A':'wnnnnwnnw','B':'nnwnnwnnw','C':'wnwnnwnnn','D':'nnnnwwnnw','E':'wnnnwwnnn','F':'nnwnwwnnn','G':'nnnnnwwnw','H':'wnnnnwwnn','I':'nnwnnwwnn','J':'nnnnwwwnn',
+    'K':'wnnnnnnww','L':'nnwnnnnww','M':'wnwnnnnwn','N':'nnnnwnnww','O':'wnnnwnnwn','P':'nnwnwnnwn','Q':'nnnnnnwww','R':'wnnnnnwwn','S':'nnwnnnwwn','T':'nnnnwnwwn',
+    'U':'wwnnnnnnw','V':'nwwnnnnnw','W':'wwwnnnnnn','X':'nwnnwnnnw','Y':'wwnnwnnnn','Z':'nwwnwnnnn','-':'nwnnnnwnw','.':'wwnnnnwnn',' ':'nwwnnnwnn','$':'nwnwnwnnn','/':'nwnwnnnwn','+':'nwnnnwnwn','%':'nnnwnwnwn','*':'nwnnwnwnn'
+  };
+  const safe=[...value].map(c=>patterns[c]?c:'-').join('');
+  const encoded='*'+safe+'*';
+  let x=12,bars='';
+  for(const ch of encoded){
+    const pattern=patterns[ch];
+    for(let i=0;i<pattern.length;i++){
+      const w=pattern[i]==='w'?3:1;
+      if(i%2===0) bars+=`<rect x="${x}" y="8" width="${w}" height="104" fill="#111"/>`;
+      x+=w;
+    }
+    x+=1;
+  }
+  const width=x+12;
+  return `<svg class="barcode-svg" xmlns="http://www.w3.org/2000/svg" width="${width}" height="145" viewBox="0 0 ${width} 145" role="img" aria-label="Code 39 barcode for ${escapeHtml(safe)}"><rect width="100%" height="100%" fill="#fff"/>${bars}<text x="${width/2}" y="137" text-anchor="middle" font-family="monospace" font-size="17" fill="#111">${escapeHtml(safe)}</text></svg>`;
+}
+/* Phase 3.2.C — Machine QR / barcode: the QR encodes the machine's Floor Kiosk link directly (scan
+   with a phone or tablet camera to open that machine's kiosk); the barcode encodes the machine
+   code as plain text, for asset labeling / future scanner-based lookup. QR rendering is loaded
+   on demand (not on every page load) from the same CDN this app already uses for Chart.js. */
+function loadScriptOnce(src){
+  return new Promise((resolve,reject)=>{
+    if(document.querySelector(`script[src="${src}"]`)){resolve();return;}
+    const el=document.createElement('script');el.src=src;el.onload=()=>resolve();el.onerror=()=>reject(new Error('Could not load '+src));document.head.appendChild(el);
+  });
+}
+async function ensureQrLib(){if(!window.QRCode)await loadScriptOnce('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js');}
+function kioskLinkFor(code){return `${window.location.origin}${window.location.pathname}?kiosk=${encodeURIComponent(code)}`;}
+function machinePrintDoc(machine,bodyHtml,caption){
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(machine.code)} — GUVEL</title>
+  <style>
+    @page{margin:0}
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#EAF2F8;font-family:Georgia,'Times New Roman',serif}
+    .card{width:340px;background:#fff;border:2px solid #0F1B2D;padding:30px 26px;text-align:center;clip-path:polygon(0 0,calc(100% - 16px) 0,100% 9px,100% 100%,0 100%)}
+    .brand{font-weight:700;font-size:21px;letter-spacing:.1em;color:#0F1B2D}
+    .tagline{font-size:10px;letter-spacing:.14em;color:#0CC0DF;margin-top:3px;text-transform:uppercase}
+    .rule{height:1px;background:#C9D6E2;margin:16px 0}
+    .code{font-weight:700;font-size:32px;color:#0F1B2D;line-height:1}
+    .name{font-family:Arial,sans-serif;font-size:14px;color:#52647A;margin-top:4px}
+    .art{margin:20px 0;display:flex;align-items:center;justify-content:center;min-height:150px}
+    .art img,.art svg{max-width:100%}
+    .caption{font-family:Arial,sans-serif;font-size:12px;color:#52647A}
+    @media print{body{background:#fff}.card{border:1px solid #0F1B2D}}
+  </style></head><body>
+    <div class="card">
+      <div class="brand">GUVEL</div><div class="tagline">Operational System</div>
+      <div class="rule"></div>
+      <div class="code">${escapeHtml(machine.code)}</div><div class="name">${escapeHtml(machine.name||'')}</div>
+      <div class="art">${bodyHtml}</div>
+      <div class="caption">${escapeHtml(caption)}</div>
+    </div>
+    <script>window.onload=()=>setTimeout(()=>window.print(),150);</script>
+  </body></html>`;
+}
+async function printMachineQr(machine){
+  await ensureQrLib();
+  const dataUrl=await QRCode.toDataURL(kioskLinkFor(machine.code),{width:260,margin:1,color:{dark:'#0F1B2D',light:'#FFFFFF'}});
+  const w=window.open('','_blank');
+  if(!w){alert('Please allow pop-ups to print.');return;}
+  w.document.write(machinePrintDoc(machine,`<img src="${dataUrl}" alt="QR code">`,'Scan to open this machine\u2019s Floor Kiosk'));
+  w.document.close();
+}
+function printMachineBarcode(machine){
+  const w=window.open('','_blank');
+  if(!w){alert('Please allow pop-ups to print.');return;}
+  w.document.write(machinePrintDoc(machine,code39BarcodeSvg(machine.code),'Machine ID'));
+  w.document.close();
+}
 function openMachineProfile(id){
   const m=machineCache.find(x=>x.id===id);if(!m)return;
   const links=(m.part_number_machines||[]).map(x=>x.part_numbers).filter(Boolean);
@@ -1330,11 +1390,28 @@ function openMachineProfile(id){
     <div><strong>Company Scope</strong><span>Active company only</span></div>
   </div>
   <div class="profile-next"><strong>Linked Part Numbers (${links.length})</strong>${links.length?`<ul class="profile-list">${links.map(p=>`<li><strong>${escapeHtml(p.part_number)}</strong>${p.description?` — ${escapeHtml(p.description)}`:''}</li>`).join('')}</ul>`:'<p>No Part Numbers linked yet.</p>'}
-  <div class="profile-next"><strong>Relationship:</strong> part_numbers ↔ part_number_machines ↔ machines. Part Number links are managed exclusively from the Part Number Profile.</div>`;
+  <div class="profile-next"><strong>Relationship:</strong> part_numbers ↔ part_number_machines ↔ machines. Part Number links are managed exclusively from the Part Number Profile.</div>
+  <div class="machine-kiosk-card">
+    <div class="machine-kiosk-head"><strong>Floor Kiosk access</strong><p>Bookmark this link on the tablet fixed at this machine, or scan the QR with a phone to open it.</p></div>
+    <div class="machine-kiosk-link"><input id="machineKioskLink" readonly value="${escAttr(kioskLinkFor(m.code))}"><button type="button" class="secondary" id="copyKioskLink">Copy</button></div>
+    <div class="machine-kiosk-codes">
+      <div class="machine-kiosk-code"><div id="machineQrHolder" class="machine-qr-holder"><span class="muted">Loading QR…</span></div><button type="button" class="secondary" id="printMachineQrBtn">Print QR</button></div>
+      <div class="machine-kiosk-code"><div class="machine-barcode-holder">${code39BarcodeSvg(m.code)}</div><button type="button" class="secondary" id="printMachineBarcodeBtn">Print Barcode</button></div>
+    </div>
+  </div>`;
   panel.style.display='block';
   const placeholder=document.getElementById('machineProfilePlaceholder'); if(placeholder)placeholder.style.display='none';
   const close=document.getElementById('closeMachineProfile');
   if(close)close.onclick=closeMachineProfile;
+  document.getElementById('copyKioskLink')?.addEventListener('click',()=>{
+    const input=document.getElementById('machineKioskLink');input.select();
+    navigator.clipboard?.writeText(input.value).catch(()=>document.execCommand('copy'));
+  });
+  document.getElementById('printMachineQrBtn')?.addEventListener('click',()=>printMachineQr(m));
+  document.getElementById('printMachineBarcodeBtn')?.addEventListener('click',()=>printMachineBarcode(m));
+  ensureQrLib().then(()=>QRCode.toDataURL(kioskLinkFor(m.code),{width:150,margin:1,color:{dark:'#0F1B2D',light:'#FFFFFF'}})).then(url=>{
+    const holder=document.getElementById('machineQrHolder');if(holder)holder.innerHTML=`<img src="${url}" alt="QR code for ${escAttr(m.code)}" width="150" height="150">`;
+  }).catch(()=>{const holder=document.getElementById('machineQrHolder');if(holder)holder.innerHTML='<span class="muted">QR unavailable offline.</span>';});
 }
 
 function closeMachineProfile(){

@@ -1,4 +1,4 @@
-> **Current release: Phase 3.2.B — Fix: gen_salt/crypt not found (pgcrypto search_path).** See `docs/PHASE_3_2_B_PGCRYPTO_FIX.md`. Run `sql/025_phase_3_2_B_pgcrypto_search_path_fix.sql` before retrying Set PIN.
+> **Current release: Phase 3.2.C — Kiosk cursor fix, first-pending-hour targeting, printable machine QR/barcode.** See `docs/PHASE_3_2_C_KIOSK_POLISH_MACHINE_CODES.md`.
 
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard
