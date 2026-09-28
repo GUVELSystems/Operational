@@ -233,8 +233,8 @@ function kioskDraw(){
     document.getElementById('kioskExitBtn').onclick=kioskExit;
     document.getElementById('kioskSwitchOperator').onclick=()=>{K.operator=null;sessionStorage.removeItem('kiosk_operator_'+m.id);kioskDraw();};
     document.getElementById('kioskStartBtn').onclick=()=>{
-      kioskAskSupervisor(host,{title:'Start Session',body:'This opens the machine in Production so a supervisor can start it.',confirmLabel:'Continue',
-        onConfirm:()=>{window.location.href=window.location.pathname;},onCancel:kioskDraw});
+      kioskAskSupervisor(host,{title:'Start Session',body:'This opens Start Production for this machine only. Once started, this device returns here automatically.',confirmLabel:'Continue',
+        onConfirm:()=>{window.location.href=window.location.pathname+'?openMachine='+encodeURIComponent(m.id)+'&kioskReturn='+encodeURIComponent(m.code);},onCancel:kioskDraw});
     };
     return;
   }
@@ -276,8 +276,23 @@ function kioskDraw(){
   document.getElementById('kioskExitBtn').onclick=kioskExit;
   document.getElementById('kioskSwitchOperator2').onclick=()=>{K.operator=null;sessionStorage.removeItem('kiosk_operator_'+m.id);kioskDraw();};
   document.getElementById('kioskFinishBtn').onclick=()=>{
-    kioskAskSupervisor(host,{title:'Finish Session',body:'This opens the machine in Production to review and finish the session.',confirmLabel:'Continue',
-      onConfirm:()=>{window.location.href=window.location.pathname;},onCancel:kioskDraw});
+    const hasHours=K.hours.length>0;
+    kioskAskSupervisor(host,{title:'Finish Session',
+      body:hasHours?`This closes the session and records the ${K.hours.length} hour${K.hours.length===1?'':'s'} captured (${K.hours.reduce((a,h)=>a+hourRowSplit(h).qty,0).toLocaleString()} pieces total) as one entry.`:'No hours were logged yet. This opens Production so a supervisor can enter the total production for this session.',
+      confirmLabel:'Finish Session',
+      onConfirm:async(supervisor)=>{
+        if(!hasHours){window.location.href=window.location.pathname+'?openMachine='+encodeURIComponent(m.id)+'&kioskReturn='+encodeURIComponent(m.code);return;}
+        host.innerHTML='<div class="kiosk-loading">Finishing session…</div>';
+        try{
+          await consolidateSessionHours(s,{operator_name:personnelFullName(K.operator),supervisor_name:personnelFullName(supervisor)});
+          const fr=await sb.from('machine_production_sessions').update({status:'COMPLETED',finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);
+          if(fr.error)throw new Error(fr.error.message);
+          await kioskReloadSession();
+          K.scrapLine=null;K.downtimeLine=null;
+          kioskDraw();
+        }catch(err){host.innerHTML=`<div class="kiosk-loading"><h1>Could not finish session</h1><p>${escapeHtml(err.message)}</p><button type="button" class="primary" id="kioskFinishRetry">Back</button></div>`;document.getElementById('kioskFinishRetry').onclick=kioskDraw;}
+      },
+      onCancel:kioskDraw});
   };
   document.getElementById('kioskAddScrap').onclick=()=>{
     const box=document.getElementById('kioskScrapBox');
@@ -1302,6 +1317,26 @@ async function loadMachines(){
   document.querySelectorAll('.editMachine').forEach(b=>b.onclick=()=>startMachineEdit(machineCache.find(x=>x.id===b.dataset.id)));
 }
 
+/* Phase 3.2.D — after a Kiosk-authorized Start or Finish completes, bounce straight back to the
+   kiosk instead of leaving the supervisor sitting in Production. */
+function kioskReturnIfNeeded(){
+  if(window.__guvelKioskReturn){
+    window.location.href=window.location.pathname+'?kiosk='+encodeURIComponent(window.__guvelKioskReturn);
+    return true;
+  }
+  return false;
+}
+/* Auto-open one machine's profile in Production, used when Kiosk hands off to a supervisor for
+   Start/Finish. Waits for the machine list to render (same pattern as plantOpenMachine). */
+function autoOpenMachineById(machineId){
+  const t0=Date.now();
+  const tick=()=>{
+    const btn=document.querySelector(`.status-machine-card-button[data-machine-id="${CSS.escape(machineId)}"]`);
+    if(btn){btn.click();return;}
+    if(Date.now()-t0<6000)setTimeout(tick,150);
+  };
+  setTimeout(tick,150);
+}
 /* Phase 3.2.C — shared Code 39 barcode renderer (was duplicated inside the Part Number profile;
    now also used by the Machine profile's printable QR/barcode card). */
 function code39BarcodeSvg(raw){
@@ -1695,7 +1730,12 @@ async function bootstrapSession(){
     if(!membership){showCompanySetup();return;}
     const kioskCode=kioskMachineCode();
     if(kioskCode){await renderFloorKiosk(kioskCode);return;}
-    showApp(); renderNav(); render();
+    const openMachineId=(()=>{try{return new URLSearchParams(window.location.search).get('openMachine');}catch{return null;}})();
+    const kioskReturnCode=(()=>{try{return new URLSearchParams(window.location.search).get('kioskReturn');}catch{return null;}})();
+    window.__guvelKioskReturn=openMachineId&&kioskReturnCode?kioskReturnCode:null;
+    showApp(); renderNav();
+    if(openMachineId){current='Status';renderNav();await render();autoOpenMachineById(openMachineId);return;}
+    render();
   }catch(e){showAuth(e.message||'Unable to load your company access.');}
 }
 function showCompanySetup(){
@@ -1941,7 +1981,7 @@ async function renderStatusFoundation(force=false){
         const dtOptions=downtimeCatalog.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.downtime)}</option>`).join('');
         modal.querySelector('#addFinishScrap').onclick=()=>{const row=document.createElement('div');row.className='form-grid';row.innerHTML=`<select class="finish-scrap-id" required><option value="">Select defect</option>${scrapOptions}</select><input class="finish-scrap-qty" type="number" min="1" step="1" placeholder="Qty" required><input class="finish-scrap-reason" placeholder="Reason"><button type="button" class="danger">Delete</button>`;row.querySelector('button').onclick=()=>row.remove();scrapRows.appendChild(row);};
         modal.querySelector('#addFinishDowntime').onclick=()=>{const row=document.createElement('div');row.className='form-grid';row.innerHTML=`<select class="finish-dt-id" required><option value="">Select downtime</option>${dtOptions}</select><input class="finish-dt-min" type="number" min="0.01" step="0.01" placeholder="Minutes" required><select class="finish-dt-type" required><option value="">Type</option><option>Planned</option><option>Unplanned</option></select><input class="finish-dt-reason" placeholder="Reason"><button type="button" class="danger">Delete</button>`;row.querySelector('button').onclick=()=>row.remove();dtRows.appendChild(row);};
-        modal.querySelector('#finishCaptureForm').onsubmit=async e=>{e.preventDefault();const msg=modal.querySelector('#finishMsg'),btn=modal.querySelector('#saveFinishButton');const qty=Number(modal.querySelector('#finishQty').value);if(!Number.isInteger(qty)||qty<0){msg.textContent='Production quantity must be a whole number >= 0.';msg.className='status error';return;}const scrap=[...scrapRows.querySelectorAll('.form-grid')].map(r=>({scrap_catalog_id:r.querySelector('.finish-scrap-id').value,quantity:Number(r.querySelector('.finish-scrap-qty').value),reason:r.querySelector('.finish-scrap-reason').value.trim()||null}));const dt=[...dtRows.querySelectorAll('.form-grid')].map(r=>({downtime_catalog_id:r.querySelector('.finish-dt-id').value,minutes:Number(r.querySelector('.finish-dt-min').value),event_type:r.querySelector('.finish-dt-type').value,reason:r.querySelector('.finish-dt-reason').value.trim()||null}));const scrapTotal=scrap.reduce((a,x)=>a+x.quantity,0);if(scrapTotal>qty){msg.textContent='Total scrap cannot exceed production quantity.';msg.className='status error';return;}btn.disabled=true;btn.textContent='Saving…';let captureId=null;try{if(replaceHours){const existing=await sb.from('production_captures').select('id').eq('session_id',s.id).eq('company_id',activeCompanyId).not('hour_slot','is',null);for(const row of (existing.data||[])){await sb.from('scrap_events').delete().eq('production_capture_id',row.id).eq('company_id',activeCompanyId);await sb.from('downtime_events').delete().eq('production_capture_id',row.id).eq('company_id',activeCompanyId);await sb.from('production_captures').delete().eq('id',row.id).eq('company_id',activeCompanyId);}}const payload={company_id:activeCompanyId,production_date:modal.querySelector('#finishDate').value,shift_id:s.shift_id,lot_number:s.lot_number,customer_id:s.customer_id,part_number_id:s.part_number_id,machine_id:s.machine_id,operation_id:s.operation_id,operator_name:personIdName(s.operator_id),supervisor_name:personIdName(s.supervisor_id),production_quantity:qty,confirmed:true,confirmed_at:now,session_id:s.id,hour_slot:null};const pr=await sb.from('production_captures').insert(payload).select('id').single();if(pr.error)throw new Error('Production: '+pr.error.message);captureId=pr.data.id;if(scrap.length){const sr=await sb.from('scrap_events').insert(scrap.map(x=>({...x,production_capture_id:captureId,company_id:activeCompanyId})));if(sr.error)throw new Error('Scrap: '+sr.error.message);}if(dt.length){const dr=await sb.from('downtime_events').insert(dt.map(x=>({...x,production_capture_id:captureId,company_id:activeCompanyId})));if(dr.error)throw new Error('Downtime: '+dr.error.message);}const fr=await sb.from('machine_production_sessions').update({status:'COMPLETED',finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);if(fr.error)throw new Error('Finish Session: '+fr.error.message);closeModal();dashboardDataLoaded=false;registerDataLoaded=false;await renderStatusFoundation();}catch(err){if(captureId)await sb.from('production_captures').delete().eq('id',captureId).eq('company_id',activeCompanyId);msg.textContent=err.message;msg.className='status error';btn.disabled=false;btn.textContent='Save and Finish Session';}};
+        modal.querySelector('#finishCaptureForm').onsubmit=async e=>{e.preventDefault();const msg=modal.querySelector('#finishMsg'),btn=modal.querySelector('#saveFinishButton');const qty=Number(modal.querySelector('#finishQty').value);if(!Number.isInteger(qty)||qty<0){msg.textContent='Production quantity must be a whole number >= 0.';msg.className='status error';return;}const scrap=[...scrapRows.querySelectorAll('.form-grid')].map(r=>({scrap_catalog_id:r.querySelector('.finish-scrap-id').value,quantity:Number(r.querySelector('.finish-scrap-qty').value),reason:r.querySelector('.finish-scrap-reason').value.trim()||null}));const dt=[...dtRows.querySelectorAll('.form-grid')].map(r=>({downtime_catalog_id:r.querySelector('.finish-dt-id').value,minutes:Number(r.querySelector('.finish-dt-min').value),event_type:r.querySelector('.finish-dt-type').value,reason:r.querySelector('.finish-dt-reason').value.trim()||null}));const scrapTotal=scrap.reduce((a,x)=>a+x.quantity,0);if(scrapTotal>qty){msg.textContent='Total scrap cannot exceed production quantity.';msg.className='status error';return;}btn.disabled=true;btn.textContent='Saving…';let captureId=null;try{if(replaceHours){const existing=await sb.from('production_captures').select('id').eq('session_id',s.id).eq('company_id',activeCompanyId).not('hour_slot','is',null);for(const row of (existing.data||[])){await sb.from('scrap_events').delete().eq('production_capture_id',row.id).eq('company_id',activeCompanyId);await sb.from('downtime_events').delete().eq('production_capture_id',row.id).eq('company_id',activeCompanyId);await sb.from('production_captures').delete().eq('id',row.id).eq('company_id',activeCompanyId);}}const payload={company_id:activeCompanyId,production_date:modal.querySelector('#finishDate').value,shift_id:s.shift_id,lot_number:s.lot_number,customer_id:s.customer_id,part_number_id:s.part_number_id,machine_id:s.machine_id,operation_id:s.operation_id,operator_name:personIdName(s.operator_id),supervisor_name:personIdName(s.supervisor_id),production_quantity:qty,confirmed:true,confirmed_at:now,session_id:s.id,hour_slot:null};const pr=await sb.from('production_captures').insert(payload).select('id').single();if(pr.error)throw new Error('Production: '+pr.error.message);captureId=pr.data.id;if(scrap.length){const sr=await sb.from('scrap_events').insert(scrap.map(x=>({...x,production_capture_id:captureId,company_id:activeCompanyId})));if(sr.error)throw new Error('Scrap: '+sr.error.message);}if(dt.length){const dr=await sb.from('downtime_events').insert(dt.map(x=>({...x,production_capture_id:captureId,company_id:activeCompanyId})));if(dr.error)throw new Error('Downtime: '+dr.error.message);}const fr=await sb.from('machine_production_sessions').update({status:'COMPLETED',finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);if(fr.error)throw new Error('Finish Session: '+fr.error.message);dashboardDataLoaded=false;registerDataLoaded=false;if(kioskReturnIfNeeded())return;closeModal();await renderStatusFoundation();}catch(err){if(captureId)await sb.from('production_captures').delete().eq('id',captureId).eq('company_id',activeCompanyId);msg.textContent=err.message;msg.className='status error';btn.disabled=false;btn.textContent='Save and Finish Session';}};
       };
 const __cats=await getCatalogsCached();window.__guvelFinishScrapCatalog=__cats.scrap;window.__guvelFinishDowntimeCatalog=__cats.downtime;
       const hourFloorISO=(d)=>{const x=new Date(d);x.setMinutes(0,0,0);return x.toISOString();};
@@ -2060,7 +2100,7 @@ const __cats=await getCatalogsCached();window.__guvelFinishScrapCatalog=__cats.s
               await consolidateSessionHours(s,{operator_name:personIdName(s.operator_id),supervisor_name:personIdName(s.supervisor_id)});
               const fr=await sb.from('machine_production_sessions').update({status:'COMPLETED',finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);
               if(fr.error)throw new Error('Finish Session: '+fr.error.message);
-              dashboardDataLoaded=false;registerDataLoaded=false;closeModal();await renderStatusFoundation();
+              dashboardDataLoaded=false;registerDataLoaded=false;if(kioskReturnIfNeeded())return;closeModal();await renderStatusFoundation();
             }catch(err){msg.textContent=err.message;msg.className='status error';btn.disabled=false;btn.textContent='Confirm and Finish Session';}
           });
         };
@@ -2071,7 +2111,7 @@ const __cats=await getCatalogsCached();window.__guvelFinishScrapCatalog=__cats.s
     const stPart=modal.querySelector('#stPart'),stCustomer=modal.querySelector('#stCustomer'),stOperation=modal.querySelector('#stOperation'),stHint=modal.querySelector('#stOperationHint'),stRequired=modal.querySelector('#stOperationRequiredHint');
     const refreshOperationOptions=()=>{const partId=stPart.value;stOperation.innerHTML='<option value="">Select operation</option>';stOperation.disabled=!partId;stOperation.required=false;if(!partId){stHint.textContent='Select a part number to load its operations.';stRequired.textContent='(select part number)';return;}let ops=operationList.filter(x=>x.part_number_id===partId);const machineOps=operationMachineLinks.filter(x=>x.part_number_id===partId&&x.machine_id===machineId).map(x=>x.operation_id);if(machineOps.length){ops=ops.filter(x=>machineOps.includes(x.id));stHint.textContent='Showing operations configured for this machine and part number.';}else{stHint.textContent='No machine-specific mapping found; showing all part-number operations.';}if(!ops.length){stHint.textContent='No operations configured for this part number.';stRequired.textContent='(not configured)';return;}stOperation.required=true;stRequired.textContent='*';stOperation.innerHTML='<option value="">Select operation</option>'+ops.map(x=>`<option value="${x.id}">${escapeHtml(x.operation_number)} — ${escapeHtml(x.operation_name||'')}</option>`).join('');};
     stPart.addEventListener('change',()=>{const selected=stPart.options[stPart.selectedIndex];if(selected?.dataset.customer&&!stCustomer.value)stCustomer.value=selected.dataset.customer;refreshOperationOptions();});
-    modal.querySelector('#statusStartForm').addEventListener('submit',async e=>{e.preventDefault();const msg=modal.querySelector('#statusMsg'),button=modal.querySelector('#statusStartButton');const payload={company_id:activeCompanyId,machine_id:machineId,shift_id:modal.querySelector('#stShift').value,customer_id:stCustomer.value,part_number_id:stPart.value,lot_number:modal.querySelector('#stLot').value.trim(),operation_id:stOperation.value||null,operator_id:modal.querySelector('#stOperator').value||null,supervisor_id:modal.querySelector('#stSupervisor').value||null,status:'RUNNING',started_at:new Date().toISOString()};if(!payload.lot_number){msg.textContent='Lot number is required.';msg.className='status error';return;}if(stOperation.required&&!payload.operation_id){msg.textContent='Select an operation for this part number.';msg.className='status error';return;}button.disabled=true;button.textContent='Starting…';const r=await sb.from('machine_production_sessions').insert(payload);if(r.error){button.disabled=false;button.textContent='Start Production';if(String(r.error.message||'').includes('uq_machine_production_sessions_active_machine')){msg.textContent='This machine already has an active production session. Refreshing status…';msg.className='status error';closeModal();await renderStatusFoundation();return;}msg.textContent=r.error.message;msg.className='status error';return;}closeModal();await renderStatusFoundation();});
+    modal.querySelector('#statusStartForm').addEventListener('submit',async e=>{e.preventDefault();const msg=modal.querySelector('#statusMsg'),button=modal.querySelector('#statusStartButton');const payload={company_id:activeCompanyId,machine_id:machineId,shift_id:modal.querySelector('#stShift').value,customer_id:stCustomer.value,part_number_id:stPart.value,lot_number:modal.querySelector('#stLot').value.trim(),operation_id:stOperation.value||null,operator_id:modal.querySelector('#stOperator').value||null,supervisor_id:modal.querySelector('#stSupervisor').value||null,status:'RUNNING',started_at:new Date().toISOString()};if(!payload.lot_number){msg.textContent='Lot number is required.';msg.className='status error';return;}if(stOperation.required&&!payload.operation_id){msg.textContent='Select an operation for this part number.';msg.className='status error';return;}button.disabled=true;button.textContent='Starting…';const r=await sb.from('machine_production_sessions').insert(payload);if(r.error){button.disabled=false;button.textContent='Start Production';if(String(r.error.message||'').includes('uq_machine_production_sessions_active_machine')){msg.textContent='This machine already has an active production session. Refreshing status…';msg.className='status error';if(kioskReturnIfNeeded())return;closeModal();await renderStatusFoundation();return;}msg.textContent=r.error.message;msg.className='status error';return;}if(kioskReturnIfNeeded())return;closeModal();await renderStatusFoundation();});
   };
   renderCards();
 }

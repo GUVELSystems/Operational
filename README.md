@@ -1,4 +1,4 @@
-> **Current release: Phase 3.2.C — Kiosk cursor fix, first-pending-hour targeting, printable machine QR/barcode.** See `docs/PHASE_3_2_C_KIOSK_POLISH_MACHINE_CODES.md`.
+> **Current release: Phase 3.2.D — Kiosk automatic Start/Finish round-trip.** See `docs/PHASE_3_2_D_KIOSK_AUTO_START_FINISH.md`.
 
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard
