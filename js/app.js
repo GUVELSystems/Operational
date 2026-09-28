@@ -1,8 +1,8 @@
 const cfg=window.GUVEL_CONFIG;let sb=null;
 if(cfg.SUPABASE_URL&&cfg.SUPABASE_ANON_KEY) sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
-const navItems=['Dashboard','Status','Customers','Part Numbers','Machines','Catalog','Registers','Personnel','Settings'];
+const navItems=['Dashboard','Status','Customers','Part Numbers','Machines','Catalog','Registers','Personnel','Runs','Settings'];
 const navLabels={Status:'Production'};
-const navIcons={Dashboard:'▦',Status:'◉',Customers:'♙','Part Numbers':'▤',Machines:'▥',Catalog:'◈',Registers:'☷',Personnel:'♙',Settings:'⚙'};
+const navIcons={Dashboard:'▦',Status:'◉',Customers:'♙','Part Numbers':'▤',Machines:'▥',Catalog:'◈',Registers:'☷',Personnel:'♙',Runs:'▧',Settings:'⚙'};
 const nav=document.getElementById('nav'),view=document.getElementById('view');let current='Dashboard';
 function renderNav(){nav.innerHTML=navItems.map(x=>`<button class="nav-item ${x===current?'active':''}" data-page="${x}"><span class="nav-icon" aria-hidden="true">${navIcons[x]||'•'}</span><span>${escapeHtml(navLabels[x]||x)}</span></button>`).join('');nav.querySelectorAll('button').forEach(b=>b.onclick=()=>{current=b.dataset.page;renderNav();render();});}
 function head(title,desc){return `<div class="page-head"><div><div class="eyebrow">GUVEL OPERATIONAL</div><h1>${title}</h1><p>${desc}</p></div></div>`}
@@ -160,6 +160,7 @@ function kioskAskSupervisor(host,{title,body,confirmLabel='Confirm',onConfirm,on
     onConfirm(supervisors.find(p=>p.id===sel.value));
   };
   document.getElementById('kioskGatePin').focus();
+  document.getElementById('kioskGatePin').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();document.getElementById('kioskGateOk').click();}});
 }
 
 let kioskState=null;
@@ -184,7 +185,7 @@ async function renderFloorKiosk(code){
     sb.from('shifts').select('id,code,name,start_time,end_time,excluded_planned_minutes').eq('company_id',activeCompanyId)
   ]);
   if(mRes.error||!mRes.data){content.innerHTML=`<div class="kiosk-loading"><h1>Machine not found</h1><p>No machine with code "${escapeHtml(code)}" in this company. Check the link on this device.</p></div>`;return;}
-  kioskState={machine:mRes.data,personnel:pRes.data||[],scrapCatalog:scRes.data||[],downtimeCatalog:dcRes.data||[],cycleTimes:(ctRes.data||[]).map(x=>({...x,key:`${x.part_number_id}|${x.operation_id}|${x.machine_id}`})),shifts:shRes.data||[],session:null,hours:[],operator:null,scrapLines:[],downtimeLines:[],editingHourIso:null,draftQty:null,pendingOverride:null};
+  kioskState={machine:mRes.data,personnel:pRes.data||[],scrapCatalog:scRes.data||[],downtimeCatalog:dcRes.data||[],cycleTimes:(ctRes.data||[]).map(x=>({...x,key:`${x.part_number_id}|${x.operation_id}|${x.machine_id}`})),shifts:shRes.data||[],session:null,hours:[],operator:null,scrapLines:[],downtimeLines:[],editingHourIso:null,draftQty:null,manualEditIso:null,pendingOverride:null};
   const savedOp=sessionStorage.getItem('kiosk_operator_'+kioskState.machine.id);
   if(savedOp){const p=kioskState.personnel.find(x=>x.id===savedOp);if(p)kioskState.operator=p;}
   await kioskReloadSession();
@@ -259,7 +260,7 @@ const s=K.session;
   const slots=realtimeSlotsFor(s,new Date());
   const loggedIso=new Set(K.hours.map(h=>new Date(h.hour_slot).toISOString()));
   const pending=slots.filter(sl=>!loggedIso.has(sl.start.toISOString()));
-  const currentSlot=pending.length?pending[0]:slots[slots.length-1];
+  const currentSlot=K.manualEditIso?(slots.find(sl=>sl.start.toISOString()===K.manualEditIso)||pending[0]||slots[slots.length-1]):(pending.length?pending[0]:slots[slots.length-1]);
   const currentIso=currentSlot?currentSlot.start.toISOString():null;
   const existing=currentIso?K.hours.find(h=>new Date(h.hour_slot).toISOString()===currentIso):null;
   /* Phase 3.2.E — an hour can have several scrap or downtime reasons (e.g. 1 pza by startup +
@@ -271,7 +272,7 @@ const s=K.session;
     K.editingHourIso=currentIso;
     K.draftQty=null;
   }
-  const pendingNotice=pending.length>1?`<div class="kiosk-pending"><strong>Pendiente registrar:</strong> ${pending.map(sl=>slotLabel(sl)).join(', ')}</div>`:'';
+  const pendingNotice=K.manualEditIso?`<div class="kiosk-pending kiosk-editing-notice"><strong>Editing a past hour</strong> — a supervisor authorized this. <button type="button" class="link-btn" id="kioskCancelEditHour">Back to current hour</button></div>`:(pending.length>1?`<div class="kiosk-pending"><strong>Pendiente registrar:</strong> ${pending.map(sl=>slotLabel(sl)).join(', ')}</div>`:'');
   const recent=K.hours.slice(-4).reverse();
   const cycle=kioskCycleSeconds(s);
   const scrapOptions=matchingScrapCatalog(K.scrapCatalog,s.part_number_id,s.operation_id);
@@ -298,14 +299,86 @@ const s=K.session;
         <div id="kioskEntryMsg" class="kiosk-msg"></div>
         <button type="submit" class="primary kiosk-save">Save Hour</button>
       </form>
-      ${recent.length?`<div class="kiosk-recent"><h3>Recent hours</h3>${recent.map(h=>{const t=hourRowSplit(h);const d=new Date(h.hour_slot),pad=n=>String(n).padStart(2,'0');return `<div class="kiosk-recent-row"><span>${pad(d.getHours())}:00</span><span>${t.qty} pcs</span><span>${t.scrap} scrap</span><span>${t.down.toFixed(0)} min down</span></div>`;}).join('')}</div>`:''}
+      ${recent.length?`<div class="kiosk-recent"><h3>Recent hours</h3>${recent.map(h=>{const t=hourRowSplit(h);const iso=new Date(h.hour_slot).toISOString();const d=new Date(h.hour_slot),pad=n=>String(n).padStart(2,'0');return `<div class="kiosk-recent-row"><span>${pad(d.getHours())}:00</span><span>${t.qty} pcs</span><span>${t.scrap} scrap</span><span>${t.down.toFixed(0)} min down</span><button type="button" class="kiosk-edit-hour" data-edit-hour-iso="${iso}" aria-label="Edit this hour">✎</button></div>`;}).join('')}</div>`:''}
     </div>
-    <div class="kiosk-footer"><button type="button" class="link-btn" id="kioskFinishBtn">Supervisor: Finish Session</button></div>
+    <div class="kiosk-footer"><button type="button" class="link-btn" id="kioskChangeProductBtn">Supervisor: Change Product / Finish Early</button><button type="button" class="link-btn" id="kioskFinishBtn">Supervisor: Finish Session</button></div>
   </div>`;
   document.getElementById('kioskExitBtn').onclick=kioskExit;
   document.getElementById('kioskFullscreenBtn')?.addEventListener('click',kioskToggleFullscreen);
   document.getElementById('kioskQty').oninput=e=>{K.draftQty=e.target.value;};
+  document.getElementById('kioskCancelEditHour')?.addEventListener('click',()=>{K.manualEditIso=null;K.editingHourIso=null;K.draftQty=null;kioskDraw();});
+  document.querySelectorAll('[data-edit-hour-iso]').forEach(b=>b.addEventListener('click',()=>{
+    const iso=b.dataset.editHourIso;
+    kioskAskSupervisor(host,{title:'Edit a past hour',body:'Only a supervisor can correct an hour already saved, to keep an accurate record of who authorized the change.',confirmLabel:'Edit this hour',
+      onConfirm:()=>{K.manualEditIso=iso;K.editingHourIso=null;K.draftQty=null;kioskDraw();},onCancel:kioskDraw});
+  }));
   document.getElementById('kioskSwitchOperator2').onclick=()=>{K.operator=null;sessionStorage.removeItem('kiosk_operator_'+m.id);kioskDraw();};
+  const kioskFinishSessionNow=async(supervisor,finishedAtISO,thenStartNew)=>{
+    content.innerHTML='<div class="kiosk-loading">Finishing session…</div>';
+    try{
+      await consolidateSessionHours(s,{operator_name:personnelFullName(K.operator),supervisor_name:personnelFullName(supervisor)});
+      const fr=await sb.from('machine_production_sessions').update({status:'COMPLETED',finished_at:finishedAtISO,updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);
+      if(fr.error)throw new Error(fr.error.message);
+      if(thenStartNew){window.location.href=window.location.pathname+'?openMachine='+encodeURIComponent(m.id)+'&kioskReturn='+encodeURIComponent(m.code);return;}
+      await kioskReloadSession();
+      K.scrapLines=[];K.downtimeLines=[];K.editingHourIso=null;K.draftQty=null;K.manualEditIso=null;
+      kioskDraw();
+    }catch(err){content.innerHTML=`<div class="kiosk-loading"><h1>Could not finish session</h1><p>${escapeHtml(err.message)}</p><button type="button" class="primary" id="kioskFinishRetry">Back</button></div>`;document.getElementById('kioskFinishRetry').onclick=kioskDraw;}
+  };
+  const kioskFormatDateTimeLocal=d=>{const pad=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;};
+  const kioskChangeProductStep3=(supervisor,endTime)=>{
+    content.innerHTML=`<div class="kiosk-shell"><div class="kiosk-topline"><span>${escapeHtml(m.code)} — ${escapeHtml(m.name||'')}</span></div>
+      <div class="kiosk-body"><div class="kiosk-idle">
+        <h1>What's next?</h1>
+        <p>This part's run will close at <strong>${endTime.toLocaleString()}</strong>.</p>
+        <div class="kiosk-change-product">
+          <button type="button" class="primary" id="kioskDoChangeProduct">Change Product — Start Next Part</button>
+          <button type="button" class="secondary" id="kioskDoFinishSoon">Finish Soon — Stop Here</button>
+        </div>
+        <p style="margin-top:18px"><button type="button" class="link-btn" id="kioskBackFromCP2">Cancel</button></p>
+      </div></div></div>`;
+    document.getElementById('kioskBackFromCP2').onclick=kioskDraw;
+    document.getElementById('kioskDoChangeProduct').onclick=()=>kioskFinishSessionNow(supervisor,endTime.toISOString(),true);
+    document.getElementById('kioskDoFinishSoon').onclick=()=>kioskFinishSessionNow(supervisor,endTime.toISOString(),false);
+  };
+  const kioskChangeProductStep2=(supervisor)=>{
+    const slots=realtimeSlotsFor(s,new Date());
+    const lastHour=K.hours[K.hours.length-1];
+    let chosenEnd;
+    if(lastHour){
+      const iso=new Date(lastHour.hour_slot).toISOString();
+      const slot=slots.find(sl=>sl.start.toISOString()===iso);
+      chosenEnd=slot?slot.end:new Date(new Date(lastHour.hour_slot).getTime()+3600000);
+    }else{chosenEnd=new Date();}
+    const drawStep=()=>{
+      content.innerHTML=`<div class="kiosk-shell"><div class="kiosk-topline"><span>${escapeHtml(m.code)} — ${escapeHtml(m.name||'')}</span></div>
+        <div class="kiosk-body"><div class="kiosk-idle">
+          <h1>Confirm Total Hours</h1>
+          <p>This part ran from ${new Date(s.started_at).toLocaleString()} to <strong>${chosenEnd.toLocaleString()}</strong>, based on the hours logged.</p>
+          <div id="kioskEditTimeBox"></div>
+          <div class="kiosk-change-product">
+            <button type="button" class="secondary" id="kioskEditTimeBtn">Edit</button>
+            <button type="button" class="primary" id="kioskConfirmTimeBtn">Confirm Total Hours</button>
+          </div>
+          <p style="margin-top:18px"><button type="button" class="link-btn" id="kioskBackFromCP">Cancel</button></p>
+        </div></div></div>`;
+      document.getElementById('kioskBackFromCP').onclick=kioskDraw;
+      document.getElementById('kioskEditTimeBtn').onclick=()=>{
+        const box=document.getElementById('kioskEditTimeBox');
+        box.innerHTML=`<label class="kiosk-qty-label">Actual end time<input type="datetime-local" id="kioskEndTimeInput" value="${kioskFormatDateTimeLocal(chosenEnd)}"></label>`;
+      };
+      document.getElementById('kioskConfirmTimeBtn').onclick=()=>{
+        const input=document.getElementById('kioskEndTimeInput');
+        if(input&&input.value){const v=new Date(input.value);if(!isNaN(v))chosenEnd=v;}
+        kioskChangeProductStep3(supervisor,chosenEnd);
+      };
+    };
+    drawStep();
+  };
+  document.getElementById('kioskChangeProductBtn').onclick=()=>{
+    kioskAskSupervisor(host,{title:'Change Product / Finish Early',body:'Close this part\u2019s run before the shift ends, and start the next part right away if needed.',confirmLabel:'Continue',
+      onConfirm:supervisor=>kioskChangeProductStep2(supervisor),onCancel:kioskDraw});
+  };
   document.getElementById('kioskFinishBtn').onclick=()=>{
     const hasHours=K.hours.length>0;
     kioskAskSupervisor(host,{title:'Finish Session',
@@ -313,15 +386,7 @@ const s=K.session;
       confirmLabel:'Finish Session',
       onConfirm:async(supervisor)=>{
         if(!hasHours){window.location.href=window.location.pathname+'?openMachine='+encodeURIComponent(m.id)+'&kioskReturn='+encodeURIComponent(m.code);return;}
-        content.innerHTML='<div class="kiosk-loading">Finishing session…</div>';
-        try{
-          await consolidateSessionHours(s,{operator_name:personnelFullName(K.operator),supervisor_name:personnelFullName(supervisor)});
-          const fr=await sb.from('machine_production_sessions').update({status:'COMPLETED',finished_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);
-          if(fr.error)throw new Error(fr.error.message);
-          await kioskReloadSession();
-          K.scrapLines=[];K.downtimeLines=[];K.editingHourIso=null;K.draftQty=null;
-          kioskDraw();
-        }catch(err){content.innerHTML=`<div class="kiosk-loading"><h1>Could not finish session</h1><p>${escapeHtml(err.message)}</p><button type="button" class="primary" id="kioskFinishRetry">Back</button></div>`;document.getElementById('kioskFinishRetry').onclick=kioskDraw;}
+        await kioskFinishSessionNow(supervisor,new Date().toISOString(),false);
       },
       onCancel:kioskDraw});
   };
@@ -341,7 +406,13 @@ const s=K.session;
     document.getElementById('kioskDtSave').onclick=()=>{
       const id=document.getElementById('kioskDtCat').value,min=Number(document.getElementById('kioskDtMin').value),type=document.getElementById('kioskDtType').value;
       if(!id||!min)return;
-      K.downtimeLines.push({downtime_catalog_id:id,minutes:min,event_type:type,reason:null});kioskDraw();
+      const line={downtime_catalog_id:id,minutes:min,event_type:type,reason:null};
+      if(type==='Planned'){
+        kioskAskSupervisor(host,{title:'Confirm Planned downtime',body:`${min} minute(s) of Planned downtime (${escapeHtml((K.downtimeCatalog.find(x=>x.id===id)||{}).downtime||'')}) needs a supervisor's confirmation.`,confirmLabel:'Confirm',
+          onConfirm:()=>{K.downtimeLines.push(line);kioskDraw();},onCancel:kioskDraw});
+        return;
+      }
+      K.downtimeLines.push(line);kioskDraw();
     };
     document.getElementById('kioskDtCancel').onclick=()=>{box.innerHTML='';};
   };
@@ -358,6 +429,7 @@ const s=K.session;
       btn.disabled=true;btn.textContent='Saving…';
       try{
         await kioskSaveHour(currentIso,existing?.id||null,qty,K.scrapLines,K.downtimeLines);
+        K.manualEditIso=null;
         K.editingHourIso=null;K.draftQty=null;
         await kioskReloadSession();
         msg.textContent='';kioskDraw();
@@ -1727,7 +1799,7 @@ document.addEventListener('click', async (event)=>{
   }
 });
 
-function page(){switch(current){case'Dashboard':return dashboard();case'Status':return '';case'Customers':return customersPage();case'Part Numbers':return partNumbersPage();case'Machines':return machinesPage();case'Catalog':return catalogPage();case'Registers':return registersPage();case'Personnel':return '';case'Settings':return shiftsPage();default:return '';}}
+function page(){switch(current){case'Dashboard':return dashboard();case'Status':return '';case'Customers':return customersPage();case'Part Numbers':return partNumbersPage();case'Machines':return machinesPage();case'Catalog':return catalogPage();case'Registers':return registersPage();case'Personnel':return '';case'Runs':return '';case'Settings':return shiftsPage();default:return '';}}
 async function render(){
   try{
     if(!view) throw new Error('Application view container was not found.');
@@ -1739,6 +1811,11 @@ async function render(){
     if(current==='Status'){
       view.innerHTML='';
       await renderStatusFoundation();
+      return;
+    }
+    if(current==='Runs'){
+      view.innerHTML='';
+      await renderRunsFoundation();
       return;
     }
     view.innerHTML=page();
@@ -1754,7 +1831,7 @@ async function render(){
     view.innerHTML=`<div class="panel"><h2>Module loading error</h2><p>${escapeHtml(error.message||'Unknown error')}</p></div>`;
   }
 }
-document.getElementById('refreshBtn').onclick=()=>{if(current==='Dashboard')loadDashboardData(true);else if(current==='Registers')loadRegisters(true);else render();};
+document.getElementById('refreshBtn').onclick=()=>{if(current==='Dashboard')loadDashboardData(true);else if(current==='Registers')loadRegisters(true);else if(current==='Runs')renderRunsFoundation(true);else render();};
 
 let activeCompanyId=null;
 let currentUser=null;
@@ -2380,13 +2457,16 @@ function registerDateTime(v){if(!v)return '—';const d=new Date(v);return Numbe
 function registerMoney(v){return v==null?'—':Number(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});}
 
 async function loadRegisterMasterData(){
-  const [c,p,s]=await Promise.all([
+  const [c,p,s,sc,dc]=await Promise.all([
     sb.from('customers').select('id,code,name').eq('company_id',activeCompanyId).order('name'),
     sb.from('part_numbers').select('id,part_number,customer_id').eq('company_id',activeCompanyId).order('part_number'),
-    sb.from('shifts').select('id,code,name').eq('company_id',activeCompanyId).order('code')
+    sb.from('shifts').select('id,code,name').eq('company_id',activeCompanyId).order('code'),
+    sb.from('scrap_catalog').select('id,code,defect,part_number_id,operation_id').eq('company_id',activeCompanyId),
+    sb.from('downtime_catalog').select('id,code,downtime').eq('company_id',activeCompanyId)
   ]);
-  if(c.error)throw c.error;if(p.error)throw p.error;if(s.error)throw s.error;
+  if(c.error)throw c.error;if(p.error)throw p.error;if(s.error)throw s.error;if(sc.error)throw sc.error;if(dc.error)throw dc.error;
   registerState.customers=c.data||[];registerState.parts=p.data||[];registerState.shifts=s.data||[];
+  registerState.scrapCatalog=sc.data||[];registerState.downtimeCatalog=dc.data||[];
 }
 
 function populateRegisterFilters(){
@@ -2431,11 +2511,11 @@ function renderRegisterTable(){
     const total=rows.reduce((n,r)=>n+Number(r.production_quantity||0),0);summary.innerHTML=`<div class="card"><div class="label">Production Records</div><div class="metric">${rows.length.toLocaleString()}</div></div><div class="card"><div class="label">Production Quantity</div><div class="metric">${total.toLocaleString()}</div></div>`;
   } else if(tab==='Scrap'){
     thead.innerHTML='<tr><th>Date / Time</th><th>Shift</th><th>Lot</th><th>Customer</th><th>Part Number</th><th>Operation</th><th>Machine</th><th>Defect Code</th><th>Defect</th><th>Category</th><th>Scrap Qty</th><th>Scrap Cost</th><th>Reason</th><th>Action</th></tr>';
-    tbody.innerHTML=rows.length?rows.map(r=>{const cost=Number(r.scrap_cost||0)*Number(r.quantity||0);return `<tr><td>${registerDateTime(r.created_at)}</td><td>${escapeHtml(shiftName(r.shift_id))}</td><td>${escapeHtml(r.lot_number)}</td><td>${escapeHtml(customerName(r.customer_id))}</td><td>${escapeHtml(partName(r.part_number_id))}</td><td>${escapeHtml(r.operation?.operation_number||'')} ${r.operation?.operation_name?'— '+escapeHtml(r.operation.operation_name):''}</td><td>${escapeHtml(r.machine?`${r.machine.code} — ${r.machine.name||''}`:'—')}</td><td>${escapeHtml(r.defect?.code||'—')}</td><td>${escapeHtml(r.defect?.defect||'—')}</td><td>${escapeHtml(r.defect?.category||'—')}</td><td>${Number(r.quantity||0).toLocaleString()}</td><td>${registerMoney(cost)}</td><td>${escapeHtml(r.reason||'—')}</td><td><button class="danger register-delete" type="button" data-delete-scrap="${r.id}">Delete Scrap</button></td></tr>`}).join(''):'<tr><td colspan="14" class="empty">No Scrap records match the selected filters.</td></tr>';
+    tbody.innerHTML=rows.length?rows.map(r=>{const cost=Number(r.scrap_cost||0)*Number(r.quantity||0);return `<tr data-scrap-row="${r.id}"><td>${registerDateTime(r.created_at)}</td><td>${escapeHtml(shiftName(r.shift_id))}</td><td>${escapeHtml(r.lot_number)}</td><td>${escapeHtml(customerName(r.customer_id))}</td><td>${escapeHtml(partName(r.part_number_id))}</td><td>${escapeHtml(r.operation?.operation_number||'')} ${r.operation?.operation_name?'— '+escapeHtml(r.operation.operation_name):''}</td><td>${escapeHtml(r.machine?`${r.machine.code} — ${r.machine.name||''}`:'—')}</td><td>${escapeHtml(r.defect?.code||'—')}</td><td>${escapeHtml(r.defect?.defect||'—')}</td><td>${escapeHtml(r.defect?.category||'—')}</td><td>${Number(r.quantity||0).toLocaleString()}</td><td>${registerMoney(cost)}</td><td>${escapeHtml(r.reason||'—')}</td><td class="actions"><button class="secondary register-edit" type="button" data-edit-scrap="${r.id}">Edit</button> <button class="danger register-delete" type="button" data-delete-scrap="${r.id}">Delete Scrap</button></td></tr>`}).join(''):'<tr><td colspan="14" class="empty">No Scrap records match the selected filters.</td></tr>';
     const total=rows.reduce((n,r)=>n+Number(r.quantity||0),0),cost=rows.reduce((n,r)=>n+Number(r.quantity||0)*Number(r.scrap_cost||0),0);summary.innerHTML=`<div class="card"><div class="label">Scrap Events</div><div class="metric">${rows.length.toLocaleString()}</div></div><div class="card"><div class="label">Scrap Quantity</div><div class="metric">${total.toLocaleString()}</div></div><div class="card"><div class="label">Scrap Cost</div><div class="metric">${registerMoney(cost)}</div></div>`;
   } else {
     thead.innerHTML='<tr><th>Date / Time</th><th>Customer</th><th>Part Number</th><th>Machine</th><th>Downtime Code</th><th>Downtime</th><th>Category</th><th>Type</th><th>Minutes</th><th>Reason</th><th>Action</th></tr>';
-    tbody.innerHTML=rows.length?rows.map(r=>`<tr><td>${registerDateTime(r.created_at)}</td><td>${escapeHtml(customerName(r.customer_id))}</td><td>${escapeHtml(partName(r.part_number_id))}</td><td>${escapeHtml(r.machine?`${r.machine.code} — ${r.machine.name||''}`:'—')}</td><td>${escapeHtml(r.downtime?.code||'—')}</td><td>${escapeHtml(r.downtime?.downtime||'—')}</td><td>${escapeHtml(r.downtime?.category||'—')}</td><td>${escapeHtml(r.event_type||'—')}</td><td>${Number(r.minutes||0).toLocaleString(undefined,{maximumFractionDigits:2})}</td><td>${escapeHtml(r.reason||'—')}</td><td><button class="danger register-delete" type="button" data-delete-downtime="${r.id}">Delete Downtime</button></td></tr>`).join(''):'<tr><td colspan="11" class="empty">No Downtime records match the selected filters.</td></tr>';
+    tbody.innerHTML=rows.length?rows.map(r=>`<tr data-downtime-row="${r.id}"><td>${registerDateTime(r.created_at)}</td><td>${escapeHtml(customerName(r.customer_id))}</td><td>${escapeHtml(partName(r.part_number_id))}</td><td>${escapeHtml(r.machine?`${r.machine.code} — ${r.machine.name||''}`:'—')}</td><td>${escapeHtml(r.downtime?.code||'—')}</td><td>${escapeHtml(r.downtime?.downtime||'—')}</td><td>${escapeHtml(r.downtime?.category||'—')}</td><td>${escapeHtml(r.event_type||'—')}</td><td>${Number(r.minutes||0).toLocaleString(undefined,{maximumFractionDigits:2})}</td><td>${escapeHtml(r.reason||'—')}</td><td class="actions"><button class="secondary register-edit" type="button" data-edit-downtime="${r.id}">Edit</button> <button class="danger register-delete" type="button" data-delete-downtime="${r.id}">Delete Downtime</button></td></tr>`).join(''):'<tr><td colspan="11" class="empty">No Downtime records match the selected filters.</td></tr>';
     const total=rows.reduce((n,r)=>n+Number(r.minutes||0),0);summary.innerHTML=`<div class="card"><div class="label">Downtime Events</div><div class="metric">${rows.length.toLocaleString()}</div></div><div class="card"><div class="label">Downtime Minutes</div><div class="metric">${total.toLocaleString(undefined,{maximumFractionDigits:2})}</div></div>`;
   }
 }
@@ -2517,18 +2597,258 @@ async function deleteRegisterRecord(table,id,kind){
   }
 }
 
+
+/* =====================================================================
+   Phase 3.2.I — Runs: traceability history. Every finished production
+   capture is one "run", with its own profile (metrics + the exact scrap
+   and downtime events that happened during it) and a one-page printout.
+   ===================================================================== */
+let runsState={rows:[],customers:[],parts:[],machines:[],loaded:false};
+function runNumberLabel(r){return `RUN-${String(r.runNumber).padStart(6,'0')}`;}
+async function renderRunsFoundation(force=false){
+  if(!sb||!activeCompanyId){view.innerHTML='<div class="panel"><h2>Runs unavailable</h2><p>Supabase configuration or active company context is missing.</p></div>';return;}
+  view.innerHTML=`<div class="page-head"><div><div class="eyebrow">GUVEL OPERATIONAL</div><h1>Runs</h1><p>Traceability history — every finished production run, with its own profile of scrap and downtime events. Look up a lot number here to see exactly what happened during that run.</p></div></div>
+    <div class="panel section" id="runsFilterPanel">
+      <div class="section-title"><h2>Filters</h2></div>
+      <div class="form-grid" id="runsFilters">
+        <div class="field"><label>Date From</label><input id="runFrom" type="date"></div>
+        <div class="field"><label>Date To</label><input id="runTo" type="date"></div>
+        <div class="field"><label>Customer</label><select id="runCustomer"><option value="">All Customers</option></select></div>
+        <div class="field"><label>Part Number</label><select id="runPart"><option value="">All Part Numbers</option></select></div>
+        <div class="field"><label>Machine</label><select id="runMachine"><option value="">All Machines</option></select></div>
+        <div class="field"><label>Search</label><input id="runSearch" placeholder="Lot, part number, machine…"></div>
+      </div>
+      <div class="actions" style="margin-top:10px"><button class="secondary" id="runsClear" type="button">Clear Filters</button></div>
+    </div>
+    <div id="runsListHost"></div>
+    <div id="runProfileHost"></div>`;
+  if(!force&&runsState.loaded){populateRunsFilters();wireRunsFilters();renderRunsList();return;}
+  view.querySelector('#runsListHost').innerHTML='<div class="panel section"><p class="muted">Loading runs…</p></div>';
+  const [prod,cust,parts,mach,scrapAll,downAll]=await Promise.all([
+    sb.from('production_captures').select('id,captured_at,production_date,shift_id,lot_number,customer_id,part_number_id,machine_id,operation_id,operator_name,supervisor_name,production_quantity,session_id,shifts(code,name),customers(code,name),part_numbers(part_number,description,piece_cost,scrap_cost),operations(operation_number,operation_name),machines(code,name)').eq('company_id',activeCompanyId).order('captured_at',{ascending:true}),
+    sb.from('customers').select('id,code,name').eq('company_id',activeCompanyId).order('name'),
+    sb.from('part_numbers').select('id,part_number').eq('company_id',activeCompanyId).order('part_number'),
+    sb.from('machines').select('id,code,name').eq('company_id',activeCompanyId).order('code'),
+    sb.from('scrap_events').select('id,production_capture_id,scrap_catalog_id,quantity,reason,created_at,scrap_catalog(code,defect,category)').eq('company_id',activeCompanyId),
+    sb.from('downtime_events').select('id,production_capture_id,downtime_catalog_id,minutes,event_type,reason,created_at,downtime_catalog(code,downtime,category)').eq('company_id',activeCompanyId)
+  ]);
+  const errors=[prod,cust,parts,mach,scrapAll,downAll].filter(x=>x.error);
+  if(errors.length){view.querySelector('#runsListHost').innerHTML=`<div class="panel"><h2>Runs could not load</h2><p>${escapeHtml(errors[0].error.message)}</p></div>`;return;}
+  const scrapByCapture=new Map(),downByCapture=new Map();
+  (scrapAll.data||[]).forEach(x=>{if(!scrapByCapture.has(x.production_capture_id))scrapByCapture.set(x.production_capture_id,[]);scrapByCapture.get(x.production_capture_id).push(x);});
+  (downAll.data||[]).forEach(x=>{if(!downByCapture.has(x.production_capture_id))downByCapture.set(x.production_capture_id,[]);downByCapture.get(x.production_capture_id).push(x);});
+  runsState.rows=(prod.data||[]).map((r,i)=>{
+    const scrapRows=(scrapByCapture.get(r.id)||[]).slice().sort((a,b)=>a.created_at<b.created_at?-1:1);
+    const downRows=(downByCapture.get(r.id)||[]).slice().sort((a,b)=>a.created_at<b.created_at?-1:1);
+    const scrapQty=scrapRows.reduce((a,x)=>a+(x.quantity||0),0);
+    const downMin=downRows.reduce((a,x)=>a+(Number(x.minutes)||0),0);
+    const qty=Number(r.production_quantity||0),good=Math.max(0,qty-scrapQty);
+    const pieceCost=Number(r.part_numbers?.piece_cost||0),scrapCostRate=Number(r.part_numbers?.scrap_cost||0);
+    const goodCost=good*pieceCost,poorCost=scrapQty*scrapCostRate,totalCost=goodCost+poorCost;
+    return {...r,runNumber:i+1,scrapRows,downRows,scrapQty,downMin,good,ftq:qty>0?good/qty:null,copq:totalCost>0?poorCost/totalCost:null,scrapCostTotal:poorCost};
+  }).slice().reverse();
+  runsState.customers=cust.data||[];runsState.parts=parts.data||[];runsState.machines=mach.data||[];
+  runsState.loaded=true;
+  populateRunsFilters();wireRunsFilters();renderRunsList();
+}
+function populateRunsFilters(){
+  const c=document.getElementById('runCustomer'),p=document.getElementById('runPart'),m=document.getElementById('runMachine');
+  if(!c)return;
+  c.innerHTML='<option value="">All Customers</option>'+runsState.customers.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.name)}</option>`).join('');
+  p.innerHTML='<option value="">All Part Numbers</option>'+runsState.parts.map(x=>`<option value="${x.id}">${escapeHtml(x.part_number)}</option>`).join('');
+  m.innerHTML='<option value="">All Machines</option>'+runsState.machines.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.name||'')}</option>`).join('');
+}
+function runsGetFilters(){return {from:document.getElementById('runFrom')?.value||'',to:document.getElementById('runTo')?.value||'',customer:document.getElementById('runCustomer')?.value||'',part:document.getElementById('runPart')?.value||'',machine:document.getElementById('runMachine')?.value||'',search:(document.getElementById('runSearch')?.value||'').trim().toLowerCase()};}
+function wireRunsFilters(){
+  ['runFrom','runTo','runCustomer','runPart','runMachine','runSearch'].forEach(id=>{
+    const el=document.getElementById(id);if(!el)return;
+    el.addEventListener(el.tagName==='SELECT'||el.type==='date'?'change':'input',()=>renderRunsList());
+  });
+  document.getElementById('runsClear').onclick=()=>{['runFrom','runTo','runCustomer','runPart','runMachine','runSearch'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});renderRunsList();};
+}
+function renderRunsList(){
+  const host=document.getElementById('runsListHost');if(!host)return;
+  const f=runsGetFilters();
+  const rows=runsState.rows.filter(r=>{
+    const d=(r.production_date||'').slice(0,10);
+    if(f.from&&d<f.from)return false;
+    if(f.to&&d>f.to)return false;
+    if(f.customer&&r.customer_id!==f.customer)return false;
+    if(f.part&&r.part_number_id!==f.part)return false;
+    if(f.machine&&r.machine_id!==f.machine)return false;
+    if(f.search){
+      const hay=[r.lot_number,r.part_numbers?.part_number,r.machines?.code,r.machines?.name].filter(Boolean).join(' ').toLowerCase();
+      if(!hay.includes(f.search))return false;
+    }
+    return true;
+  });
+  host.innerHTML=`<div class="panel section"><div class="section-title"><h2>Run History</h2><span class="label">${rows.length.toLocaleString()} run${rows.length===1?'':'s'}</span></div>
+    <div class="table-wrap"><table><thead><tr><th>Run #</th><th>Date</th><th>Lot</th><th>Customer</th><th>Part Number</th><th>Machine</th><th>Qty</th><th>Scrap</th><th>FTQ</th><th>Downtime</th><th>Action</th></tr></thead>
+    <tbody>${rows.length?rows.map(r=>`<tr><td>${runNumberLabel(r)}</td><td>${registerDateTime(r.captured_at)}</td><td>${escapeHtml(r.lot_number||'—')}</td><td>${escapeHtml(r.customers?.name||'—')}</td><td>${escapeHtml(r.part_numbers?.part_number||'—')}</td><td>${escapeHtml(r.machines?.code||'—')}</td><td>${Number(r.production_quantity||0).toLocaleString()}</td><td>${r.scrapQty.toLocaleString()}</td><td>${r.ftq==null?'—':(r.ftq*100).toFixed(1)+'%'}</td><td>${r.downMin.toFixed(0)} min</td><td><button class="secondary runs-view" type="button" data-run-id="${r.id}">View Profile</button></td></tr>`).join(''):'<tr><td colspan="11" class="empty">No runs match the selected filters.</td></tr>'}</tbody></table></div>
+  </div>`;
+  host.querySelectorAll('.runs-view').forEach(b=>b.onclick=()=>openRunProfile(b.dataset.runId));
+}
+function openRunProfile(id){
+  const r=runsState.rows.find(x=>x.id===id);if(!r)return;
+  document.getElementById('runsFilterPanel').style.display='none';
+  document.getElementById('runsListHost').style.display='none';
+  const host=document.getElementById('runProfileHost');
+  host.innerHTML=`
+    <div class="panel section">
+      <div class="section-title profile-title"><div><div class="eyebrow">RUN PROFILE</div><h2>${runNumberLabel(r)}</h2><p>${escapeHtml(r.lot_number||'No lot number')}</p></div>
+        <div class="page-head-actions"><button class="secondary" id="runPrintBtn" type="button">Print</button><button class="secondary profile-close-btn" id="runBackBtn" type="button">× Back to Runs</button></div>
+      </div>
+      <div class="profile-grid">
+        <div><strong>Customer</strong><span>${escapeHtml(r.customers?.name||'—')}</span></div>
+        <div><strong>Part Number</strong><span>${escapeHtml(r.part_numbers?.part_number||'—')}${r.part_numbers?.description?' — '+escapeHtml(r.part_numbers.description):''}</span></div>
+        <div><strong>Operation</strong><span>${escapeHtml(r.operations?.operation_number||'—')} ${escapeHtml(r.operations?.operation_name||'')}</span></div>
+        <div><strong>Machine</strong><span>${escapeHtml(r.machines?.code||'—')}${r.machines?.name?' — '+escapeHtml(r.machines.name):''}</span></div>
+        <div><strong>Lot</strong><span>${escapeHtml(r.lot_number||'—')}</span></div>
+        <div><strong>Shift</strong><span>${escapeHtml(r.shifts?.code||'—')}</span></div>
+        <div><strong>Operator</strong><span>${escapeHtml(r.operator_name||'—')}</span></div>
+        <div><strong>Supervisor</strong><span>${escapeHtml(r.supervisor_name||'—')}</span></div>
+        <div><strong>Date / Time</strong><span>${registerDateTime(r.captured_at)}</span></div>
+      </div>
+      <div class="run-metrics">
+        <div><span>Cantidad Producida</span><strong>${Number(r.production_quantity||0).toLocaleString()}</strong></div>
+        <div><span>Good Parts</span><strong>${r.good.toLocaleString()}</strong></div>
+        <div><span>Scrap Parts</span><strong>${r.scrapQty.toLocaleString()}</strong></div>
+        <div><span>FTQ</span><strong>${r.ftq==null?'—':(r.ftq*100).toFixed(1)+'%'}</strong></div>
+        <div><span>COPQ</span><strong>${r.copq==null?'—':(r.copq*100).toFixed(1)+'%'}</strong></div>
+        <div><span>Downtime</span><strong>${r.downMin.toFixed(0)} min</strong></div>
+      </div>
+    </div>
+    <div class="panel section">
+      <h3>Scrap Events (${r.scrapRows.length})</h3>
+      <div class="table-wrap"><table><thead><tr><th>Code</th><th>Defect</th><th>Category</th><th>Qty</th><th>Reason</th></tr></thead>
+      <tbody>${r.scrapRows.length?r.scrapRows.map(x=>`<tr><td>${escapeHtml(x.scrap_catalog?.code||'—')}</td><td>${escapeHtml(x.scrap_catalog?.defect||'—')}</td><td>${escapeHtml(x.scrap_catalog?.category||'—')}</td><td>${x.quantity}</td><td>${escapeHtml(x.reason||'—')}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">No scrap events for this run.</td></tr>'}</tbody></table></div>
+    </div>
+    <div class="panel section">
+      <h3>Downtime Events (${r.downRows.length})</h3>
+      <div class="table-wrap"><table><thead><tr><th>Code</th><th>Downtime</th><th>Category</th><th>Type</th><th>Minutes</th><th>Reason</th></tr></thead>
+      <tbody>${r.downRows.length?r.downRows.map(x=>`<tr><td>${escapeHtml(x.downtime_catalog?.code||'—')}</td><td>${escapeHtml(x.downtime_catalog?.downtime||'—')}</td><td>${escapeHtml(x.downtime_catalog?.category||'—')}</td><td>${escapeHtml(x.event_type||'—')}</td><td>${Number(x.minutes||0).toLocaleString(undefined,{maximumFractionDigits:2})}</td><td>${escapeHtml(x.reason||'—')}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">No downtime events for this run.</td></tr>'}</tbody></table></div>
+    </div>`;
+  document.getElementById('runBackBtn').onclick=closeRunProfile;
+  document.getElementById('runPrintBtn').onclick=()=>printRunProfile(r);
+  host.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function closeRunProfile(){
+  const fp=document.getElementById('runsFilterPanel'),lh=document.getElementById('runsListHost'),ph=document.getElementById('runProfileHost');
+  if(fp)fp.style.display='';if(lh)lh.style.display='';if(ph)ph.innerHTML='';
+}
+function printRunProfile(r){
+  const w=window.open('','_blank');
+  if(!w){alert('Please allow pop-ups to print.');return;}
+  const scrapRows=r.scrapRows.map(x=>`<tr><td>${escapeHtml(x.scrap_catalog?.code||'—')}</td><td>${escapeHtml(x.scrap_catalog?.defect||'—')}</td><td>${x.quantity}</td><td>${escapeHtml(x.reason||'—')}</td></tr>`).join('')||'<tr><td colspan="4">No scrap events.</td></tr>';
+  const downRows=r.downRows.map(x=>`<tr><td>${escapeHtml(x.downtime_catalog?.code||'—')}</td><td>${escapeHtml(x.downtime_catalog?.downtime||'—')}</td><td>${escapeHtml(x.event_type||'—')}</td><td>${Number(x.minutes||0)}</td><td>${escapeHtml(x.reason||'—')}</td></tr>`).join('')||'<tr><td colspan="5">No downtime events.</td></tr>';
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${runNumberLabel(r)} — GUVEL</title>
+  <style>
+    @page{margin:16mm}
+    body{font-family:Arial,Helvetica,sans-serif;color:#0F1B2D;margin:0;font-size:12.5px;max-width:920px;margin:0 auto;padding:0 12px}
+    .letterhead{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:3px solid #0F1B2D;padding-bottom:10px;margin-bottom:16px}
+    .brand{font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:22px;letter-spacing:.1em}
+    .tagline{font-size:10px;letter-spacing:.12em;color:#0CC0DF;text-transform:uppercase;margin-top:2px}
+    .runid{text-align:right}
+    .runid span{font-size:10px;color:#52647A;letter-spacing:.06em}
+    .runid strong{font-size:22px;display:block;font-family:Georgia,serif}
+    h2{font-size:13px;margin:18px 0 8px;border-bottom:1px solid #C9D6E2;padding-bottom:4px;text-transform:uppercase;letter-spacing:.04em;color:#0F1B2D}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 18px;margin-bottom:6px}
+    .grid div span{display:block;font-size:9.5px;color:#52647A;text-transform:uppercase;letter-spacing:.04em}
+    .grid div strong{display:block;font-size:13px;margin-top:1px}
+    .metrics{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:#C9D6E2;border:1px solid #C9D6E2;margin:10px 0}
+    .metrics div{background:#fff;padding:8px 6px}
+    .metrics span{display:block;font-size:8.5px;color:#52647A;text-transform:uppercase}
+    .metrics strong{display:block;font-size:16px;margin-top:2px}
+    table{width:100%;border-collapse:collapse;font-size:11px}
+    th,td{border-bottom:1px solid #DDE6EE;padding:5px 6px;text-align:left}
+    th{background:#F4F8FB;font-size:9.5px;text-transform:uppercase;color:#52647A;letter-spacing:.03em}
+    footer{margin-top:22px;font-size:9px;color:#7A8A9C;text-align:center}
+    @media print{a{color:inherit;text-decoration:none}}
+  </style></head><body>
+    <div class="letterhead"><div><div class="brand">GUVEL</div><div class="tagline">Operational System</div></div><div class="runid"><span>PRODUCTION RUN</span><strong>${runNumberLabel(r)}</strong></div></div>
+    <h2>Run Details</h2>
+    <div class="grid">
+      <div><span>Date / Time</span><strong>${registerDateTime(r.captured_at)}</strong></div>
+      <div><span>Customer</span><strong>${escapeHtml(r.customers?.name||'—')}</strong></div>
+      <div><span>Part Number</span><strong>${escapeHtml(r.part_numbers?.part_number||'—')}</strong></div>
+      <div><span>Lot</span><strong>${escapeHtml(r.lot_number||'—')}</strong></div>
+      <div><span>Machine</span><strong>${escapeHtml(r.machines?.code||'—')} ${escapeHtml(r.machines?.name||'')}</strong></div>
+      <div><span>Shift</span><strong>${escapeHtml(r.shifts?.code||'—')}</strong></div>
+      <div><span>Operator</span><strong>${escapeHtml(r.operator_name||'—')}</strong></div>
+      <div><span>Supervisor</span><strong>${escapeHtml(r.supervisor_name||'—')}</strong></div>
+      <div><span>Operation</span><strong>${escapeHtml(r.operations?.operation_number||'—')} ${escapeHtml(r.operations?.operation_name||'')}</strong></div>
+    </div>
+    <div class="metrics">
+      <div><span>Produced</span><strong>${Number(r.production_quantity||0).toLocaleString()}</strong></div>
+      <div><span>Good Parts</span><strong>${r.good.toLocaleString()}</strong></div>
+      <div><span>Scrap Parts</span><strong>${r.scrapQty.toLocaleString()}</strong></div>
+      <div><span>FTQ</span><strong>${r.ftq==null?'—':(r.ftq*100).toFixed(1)+'%'}</strong></div>
+      <div><span>COPQ</span><strong>${r.copq==null?'—':(r.copq*100).toFixed(1)+'%'}</strong></div>
+      <div><span>Downtime</span><strong>${r.downMin.toFixed(0)} min</strong></div>
+    </div>
+    <h2>Scrap Events (${r.scrapRows.length})</h2>
+    <table><thead><tr><th>Code</th><th>Defect</th><th>Qty</th><th>Reason</th></tr></thead><tbody>${scrapRows}</tbody></table>
+    <h2>Downtime Events (${r.downRows.length})</h2>
+    <table><thead><tr><th>Code</th><th>Downtime</th><th>Type</th><th>Min</th><th>Reason</th></tr></thead><tbody>${downRows}</tbody></table>
+    <footer>Generated from GUVEL Operational System — ${new Date().toLocaleString()}</footer>
+    <script>window.onload=()=>setTimeout(()=>window.print(),150);</script>
+  </body></html>`);
+  w.document.close();
+}
+
 function bindRegisterDeleteActions(){
   const table=document.getElementById('registerTable');
   if(!table||table.dataset.deleteDelegationBound==='true')return;
   table.dataset.deleteDelegationBound='true';
   table.addEventListener('click',event=>{
-    const b=event.target.closest('.register-delete');
-    if(!b||!table.contains(b))return;
-    event.preventDefault();
-    if(b.dataset.deleteCapture)deleteRegisterRecord('production_captures',b.dataset.deleteCapture,'capture');
-    else if(b.dataset.deleteScrap)deleteRegisterRecord('scrap_events',b.dataset.deleteScrap,'scrap');
-    else if(b.dataset.deleteDowntime)deleteRegisterRecord('downtime_events',b.dataset.deleteDowntime,'downtime');
+    const del=event.target.closest('.register-delete');
+    if(del&&table.contains(del)){
+      event.preventDefault();
+      if(del.dataset.deleteCapture)deleteRegisterRecord('production_captures',del.dataset.deleteCapture,'capture');
+      else if(del.dataset.deleteScrap)deleteRegisterRecord('scrap_events',del.dataset.deleteScrap,'scrap');
+      else if(del.dataset.deleteDowntime)deleteRegisterRecord('downtime_events',del.dataset.deleteDowntime,'downtime');
+      return;
+    }
+    const edit=event.target.closest('.register-edit');
+    if(edit&&table.contains(edit)){
+      event.preventDefault();
+      if(edit.dataset.editScrap)openScrapEditRow(edit.dataset.editScrap);
+      else if(edit.dataset.editDowntime)openDowntimeEditRow(edit.dataset.editDowntime);
+    }
   });
+}
+/* Phase 3.2.H — Registers: Scrap and Downtime events can be corrected in place (a mis-picked
+   defect, the wrong minutes, a typo in the reason) without touching the Production quantity or
+   deleting and re-entering the whole capture. Production rows are intentionally not editable here. */
+function openScrapEditRow(id){
+  const row=document.querySelector(`tr[data-scrap-row="${CSS.escape(id)}"]`);const r=registerState.scrap.find(x=>x.id===id);
+  if(!row||!r)return;
+  const options=(registerState.scrapCatalog||[]).filter(x=>x.part_number_id==null||String(x.part_number_id)===String(r.part_number_id)).map(x=>`<option value="${x.id}" ${x.id===r.scrap_catalog_id?'selected':''}>${escapeHtml(x.code)}${x.part_number_id==null?' (General)':''} — ${escapeHtml(x.defect)}</option>`).join('');
+  row.innerHTML=`<td colspan="13"><div class="register-edit-form"><label>Defect<select id="regEditScrapCat">${options}</select></label><label>Qty<input id="regEditScrapQty" type="number" min="0" step="1" value="${r.quantity}"></label><label>Reason<input id="regEditScrapReason" value="${escAttr(r.reason||'')}"></label></div></td><td class="actions"><button class="primary" type="button" id="regEditScrapSave">Save</button> <button class="secondary" type="button" id="regEditScrapCancel">Cancel</button></td>`;
+  document.getElementById('regEditScrapCancel').onclick=()=>renderRegisterTable();
+  document.getElementById('regEditScrapSave').onclick=async()=>{
+    const btn=document.getElementById('regEditScrapSave');btn.disabled=true;btn.textContent='Saving…';
+    const payload={scrap_catalog_id:document.getElementById('regEditScrapCat').value,quantity:Number(document.getElementById('regEditScrapQty').value)||0,reason:document.getElementById('regEditScrapReason').value.trim()||null};
+    const {error}=await sb.from('scrap_events').update(payload).eq('id',id).eq('company_id',activeCompanyId);
+    if(error){registerSetMessage(error.message,'error');btn.disabled=false;btn.textContent='Save';return;}
+    Object.assign(r,payload,{defect:(registerState.scrapCatalog||[]).find(x=>x.id===payload.scrap_catalog_id)});
+    dashboardDataLoaded=false;registerSetMessage('Scrap event updated.','success');renderRegisterTable();
+  };
+}
+function openDowntimeEditRow(id){
+  const row=document.querySelector(`tr[data-downtime-row="${CSS.escape(id)}"]`);const r=registerState.downtime.find(x=>x.id===id);
+  if(!row||!r)return;
+  const options=(registerState.downtimeCatalog||[]).map(x=>`<option value="${x.id}" ${x.id===r.downtime_catalog_id?'selected':''}>${escapeHtml(x.code)} — ${escapeHtml(x.downtime)}</option>`).join('');
+  row.innerHTML=`<td colspan="8"><div class="register-edit-form"><label>Reason<select id="regEditDtCat">${options}</select></label><label>Minutes<input id="regEditDtMin" type="number" min="0" step="0.01" value="${r.minutes}"></label><label>Type<select id="regEditDtType"><option value="Planned" ${r.event_type==='Planned'?'selected':''}>Planned</option><option value="Unplanned" ${r.event_type==='Unplanned'?'selected':''}>Unplanned</option></select></label><label>Reason<input id="regEditDtReason" value="${escAttr(r.reason||'')}"></label></div></td><td class="actions"><button class="primary" type="button" id="regEditDtSave">Save</button> <button class="secondary" type="button" id="regEditDtCancel">Cancel</button></td>`;
+  document.getElementById('regEditDtCancel').onclick=()=>renderRegisterTable();
+  document.getElementById('regEditDtSave').onclick=async()=>{
+    const btn=document.getElementById('regEditDtSave');btn.disabled=true;btn.textContent='Saving…';
+    const payload={downtime_catalog_id:document.getElementById('regEditDtCat').value,minutes:Number(document.getElementById('regEditDtMin').value)||0,event_type:document.getElementById('regEditDtType').value,reason:document.getElementById('regEditDtReason').value.trim()||null};
+    const {error}=await sb.from('downtime_events').update(payload).eq('id',id).eq('company_id',activeCompanyId);
+    if(error){registerSetMessage(error.message,'error');btn.disabled=false;btn.textContent='Save';return;}
+    Object.assign(r,payload,{downtime:(registerState.downtimeCatalog||[]).find(x=>x.id===payload.downtime_catalog_id)});
+    dashboardDataLoaded=false;registerSetMessage('Downtime event updated.','success');renderRegisterTable();
+  };
 }
 
 

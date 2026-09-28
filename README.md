@@ -1,4 +1,4 @@
-> **Current release: Phase 3.2.F — QR fixed, multiple scrap/downtime lines, cursor survives Full Screen everywhere, Kiosk Full Screen.** See `docs/PHASE_3_2_E_QR_MULTILINE_CURSOR_FULLSCREEN.md`.
+> **Current release: Phase 3.2.I — New Runs module (traceability), Registers Scrap/Downtime editing, Kiosk safety (edit hours, Planned confirmation, Change Product/Finish Soon).** See `docs/PHASE_3_2_G_KIOSK_SAFETY_CHANGE_PRODUCT.md`, `docs/PHASE_3_2_H_REGISTERS_EDIT.md`, `docs/PHASE_3_2_I_RUNS_MODULE.md`.
 
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard
