@@ -883,7 +883,11 @@ body.status-modal-open,.status-modal-open{overflow:hidden}
 .kiosk-recent h3{font-size:14px;color:var(--text-2);margin-bottom:8px}
 .kiosk-recent-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:8px 12px;font-size:14px;border-top:1px solid var(--line-soft)}
 .kiosk-recent-row:first-child{border-top:0}
-.kiosk-footer{text-align:center;padding:16px}
+.kiosk-footer{display:flex;flex-direction:column;gap:10px;align-items:stretch;padding:20px 20px 28px;max-width:420px;margin:0 auto}
+.kiosk-footer-btn{min-height:50px;font-size:15px;border-color:var(--line);color:var(--text-2)}
+.kiosk-footer-btn:hover{color:var(--ink);border-color:var(--text-3)}
+button.kiosk-footer-btn-end{border-color:var(--stop);color:var(--stop-ink);font-weight:600}
+button.kiosk-footer-btn-end:hover{background:var(--stop-soft);border-color:var(--stop)}
 .kiosk-gate{position:fixed;inset:0;z-index:3100;background:rgba(15,27,45,.72);display:flex;align-items:center;justify-content:center;padding:20px}
 .kiosk-gate-card{width:min(400px,100%);background:var(--surface);padding:26px 24px;box-shadow:var(--shadow-float)}
 .kiosk-gate-card h2{font-size:20px;margin-bottom:8px}
@@ -905,7 +909,7 @@ body.status-modal-open,.status-modal-open{overflow:hidden}
 .machine-kiosk-code{display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px;background:var(--surface);border:1px solid var(--line-soft)}
 .machine-qr-holder{width:150px;height:150px;display:flex;align-items:center;justify-content:center}
 .machine-qr-holder svg{width:100%;height:100%}
-.machine-barcode-holder{max-width:100%;overflow-x:auto}
+.machine-barcode-holder{max-width:100%;overflow-x:auto;min-height:86px;display:flex;align-items:center}
 .machine-barcode-holder svg{max-width:100%;height:auto}
 @media (max-width:520px){.machine-kiosk-codes{grid-template-columns:1fr}}
 .kiosk-pending{padding:10px 14px;background:var(--watch-soft);border-left:3px solid var(--watch);font-size:14px;color:var(--ink);margin-bottom:4px}

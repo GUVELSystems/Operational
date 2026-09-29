@@ -301,7 +301,7 @@ const s=K.session;
       </form>
       ${recent.length?`<div class="kiosk-recent"><h3>Recent hours</h3>${recent.map(h=>{const t=hourRowSplit(h);const iso=new Date(h.hour_slot).toISOString();const d=new Date(h.hour_slot),pad=n=>String(n).padStart(2,'0');return `<div class="kiosk-recent-row"><span>${pad(d.getHours())}:00</span><span>${t.qty} pcs</span><span>${t.scrap} scrap</span><span>${t.down.toFixed(0)} min down</span><button type="button" class="kiosk-edit-hour" data-edit-hour-iso="${iso}" aria-label="Edit this hour">✎</button></div>`;}).join('')}</div>`:''}
     </div>
-    <div class="kiosk-footer"><button type="button" class="link-btn" id="kioskChangeProductBtn">Supervisor: Change Product / Finish Early</button><button type="button" class="link-btn" id="kioskFinishBtn">Supervisor: Finish Session</button></div>
+    <div class="kiosk-footer"><button type="button" class="secondary kiosk-footer-btn" id="kioskChangeProductBtn">Supervisor: Change Product / Finish Early</button><button type="button" class="secondary kiosk-footer-btn kiosk-footer-btn-end" id="kioskFinishBtn">Supervisor: Finish Session</button></div>
   </div>`;
   document.getElementById('kioskExitBtn').onclick=kioskExit;
   document.getElementById('kioskFullscreenBtn')?.addEventListener('click',kioskToggleFullscreen);
@@ -318,7 +318,10 @@ const s=K.session;
     try{
       await consolidateSessionHours(s,{operator_name:personnelFullName(K.operator),supervisor_name:personnelFullName(supervisor)});
       const fr=await sb.from('machine_production_sessions').update({status:'COMPLETED',finished_at:finishedAtISO,updated_at:new Date().toISOString()}).eq('id',s.id).eq('company_id',activeCompanyId);
-      if(fr.error)throw new Error(fr.error.message);
+      if(fr.error){
+        const friendly=/valid_dates|finish_check/i.test(fr.error.message)?"That end time isn't valid for this session (it must be after the session started). Go back and adjust it.":fr.error.message;
+        throw new Error(friendly);
+      }
       if(thenStartNew){window.location.href=window.location.pathname+'?openMachine='+encodeURIComponent(m.id)+'&kioskReturn='+encodeURIComponent(m.code);return;}
       await kioskReloadSession();
       K.scrapLines=[];K.downtimeLines=[];K.editingHourIso=null;K.draftQty=null;K.manualEditIso=null;
@@ -344,6 +347,7 @@ const s=K.session;
   const kioskChangeProductStep2=(supervisor)=>{
     const slots=realtimeSlotsFor(s,new Date());
     const lastHour=K.hours[K.hours.length-1];
+    const sessionStart=new Date(s.started_at);
     let chosenEnd;
     if(lastHour){
       const iso=new Date(lastHour.hour_slot).toISOString();
@@ -354,8 +358,9 @@ const s=K.session;
       content.innerHTML=`<div class="kiosk-shell"><div class="kiosk-topline"><span>${escapeHtml(m.code)} — ${escapeHtml(m.name||'')}</span></div>
         <div class="kiosk-body"><div class="kiosk-idle">
           <h1>Confirm Total Hours</h1>
-          <p>This part ran from ${new Date(s.started_at).toLocaleString()} to <strong>${chosenEnd.toLocaleString()}</strong>, based on the hours logged.</p>
+          <p>This part ran from ${sessionStart.toLocaleString()} to <strong>${chosenEnd.toLocaleString()}</strong>, based on the hours logged.</p>
           <div id="kioskEditTimeBox"></div>
+          <p class="kiosk-scan-msg" id="kioskTimeMsg"></p>
           <div class="kiosk-change-product">
             <button type="button" class="secondary" id="kioskEditTimeBtn">Edit</button>
             <button type="button" class="primary" id="kioskConfirmTimeBtn">Confirm Total Hours</button>
@@ -365,11 +370,16 @@ const s=K.session;
       document.getElementById('kioskBackFromCP').onclick=kioskDraw;
       document.getElementById('kioskEditTimeBtn').onclick=()=>{
         const box=document.getElementById('kioskEditTimeBox');
-        box.innerHTML=`<label class="kiosk-qty-label">Actual end time<input type="datetime-local" id="kioskEndTimeInput" value="${kioskFormatDateTimeLocal(chosenEnd)}"></label>`;
+        box.innerHTML=`<label class="kiosk-qty-label">Actual end time<input type="datetime-local" id="kioskEndTimeInput" value="${kioskFormatDateTimeLocal(chosenEnd)}" min="${kioskFormatDateTimeLocal(sessionStart)}" max="${kioskFormatDateTimeLocal(new Date())}"></label><p class="kiosk-hint">Must be after this part started, ${sessionStart.toLocaleString()}.</p>`;
       };
       document.getElementById('kioskConfirmTimeBtn').onclick=()=>{
+        const msg=document.getElementById('kioskTimeMsg');
         const input=document.getElementById('kioskEndTimeInput');
-        if(input&&input.value){const v=new Date(input.value);if(!isNaN(v))chosenEnd=v;}
+        let candidate=chosenEnd;
+        if(input&&input.value){const v=new Date(input.value);if(!isNaN(v))candidate=v;}
+        if(candidate<sessionStart){msg.textContent=`The end time can't be before this part started (${sessionStart.toLocaleString()}).`;return;}
+        if(candidate>new Date()){msg.textContent="The end time can't be in the future.";return;}
+        chosenEnd=candidate;
         kioskChangeProductStep3(supervisor,chosenEnd);
       };
     };
@@ -989,7 +999,22 @@ function fitDashboardFullscreen(){
 function toggleDashboardFullscreen(){const app=document.getElementById('app');if(!app)return;if(document.fullscreenElement){document.exitFullscreen?.();return;}document.documentElement.dataset.dashboardTab=dashboardState.tab;const req=app.requestFullscreen?.();if(req&&typeof req.catch==='function')req.catch(()=>{});}
 document.addEventListener('fullscreenchange',()=>{document.documentElement.classList.toggle('dashboard-fullscreen',!!document.fullscreenElement);if(document.fullscreenElement){requestAnimationFrame(fitDashboardFullscreen);}else{const dash=document.getElementById('dash');if(dash){dash.style.removeProperty('transform');dash.style.removeProperty('width');dash.style.removeProperty('height');dash.style.removeProperty('--dash-scale');}document.documentElement.classList.remove('dashboard-fit-ready');}});
 window.addEventListener('resize',()=>{if(document.fullscreenElement&&dashboardState.tab!=='General')requestAnimationFrame(fitDashboardFullscreen);});
-function bindDashboard(){const fs=document.getElementById('dashboardFullscreen');if(fs)fs.onclick=toggleDashboardFullscreen;const c=document.getElementById('dashCustomer'),p=document.getElementById('dashPart'),s=document.getElementById('dashShift'),m=document.getElementById('dashMachine'),f=document.getElementById('dashFrom'),to=document.getElementById('dashTo'),period=document.getElementById('dashPeriod');document.querySelectorAll('[data-dashboard-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-dashboard-tab]').forEach(x=>x.classList.toggle('active',x===b));dashTab(b.dataset.dashboardTab);});const rerender=()=>dashboardState.tab==='Production'?renderProductionDashboard():dashboardState.tab==='Quality'?renderQualityDashboard():dashboardState.tab==='Downtime'?renderDowntimeDashboard():renderDashboardGeneral();const apply=()=>{dashboardState.filters={...dashboardState.filters,from:f.value,to:to.value};rerender();};[f,to,p,s,m].forEach(x=>x.onchange=apply);period.onchange=()=>{const r=resolvePeriod(period.value);dashboardState.filters={...dashboardState.filters,period:period.value,from:r.from,to:r.to};f.value=r.from;to.value=r.to;rerender();};c.onchange=()=>{dashboardState.filters.customer=c.value;dashboardState.filters.part='';populateDashboardFilters();rerender();};document.getElementById('dashboardClear').onclick=()=>{dashboardState.filters={period:'This Month',from:resolvePeriod('This Month').from,to:resolvePeriod('This Month').to,customer:'',part:'',shift:'',machine:''};populateDashboardFilters();rerender();};document.getElementById('dashboardRefresh').onclick=loadDashboardData;const initial=resolvePeriod(dashboardState.filters.period||'This Month');if(!dashboardState.filters.from)dashboardState.filters.from=initial.from;if(!dashboardState.filters.to)dashboardState.filters.to=initial.to;populateDashboardFilters();/* Phase 3.0.A fix: create the active tab container before data arrives, so the first visit renders without clicking a tab. */const dashEl=document.getElementById('dash'),t0=dashboardState.tab||'General';if(dashEl&&!dashEl.firstElementChild&&['General','Production','Quality','Downtime','Plant Now'].includes(t0))dashEl.innerHTML=`<div id="dashboard${t0.replace(/\s/g,'')}"></div>`;document.querySelectorAll('[data-dashboard-tab]').forEach(x=>x.classList.toggle('active',x.dataset.dashboardTab===t0));document.documentElement.dataset.dashboardTab=t0;if(dashboardDataLoaded){renderActiveDashboard();}else{loadDashboardData();}}
+/* Phase 3.2.J — General, Production, Quality and Downtime now also auto-refresh every 60 seconds
+   while the Dashboard is open, same as Plant Now already did; previously they only updated on a
+   manual Refresh click. Skips while the filter popover is open (so it doesn't yank the screen
+   away mid-edit) or the tab is hidden. */
+let dashboardAutoTimer=null;
+function dashboardStartAutoRefresh(){
+  if(dashboardAutoTimer)return;
+  dashboardAutoTimer=setInterval(()=>{
+    if(typeof current==='undefined'||current!=='Dashboard')return;
+    if(document.hidden)return;
+    if(document.getElementById('dashboardFilters')?.hidden===false)return;
+    if(dashboardState.tab==='Plant Now')return;
+    loadDashboardData(true);
+  },60000);
+}
+function bindDashboard(){dashboardStartAutoRefresh();const fs=document.getElementById('dashboardFullscreen');if(fs)fs.onclick=toggleDashboardFullscreen;const c=document.getElementById('dashCustomer'),p=document.getElementById('dashPart'),s=document.getElementById('dashShift'),m=document.getElementById('dashMachine'),f=document.getElementById('dashFrom'),to=document.getElementById('dashTo'),period=document.getElementById('dashPeriod');document.querySelectorAll('[data-dashboard-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-dashboard-tab]').forEach(x=>x.classList.toggle('active',x===b));dashTab(b.dataset.dashboardTab);});const rerender=()=>dashboardState.tab==='Production'?renderProductionDashboard():dashboardState.tab==='Quality'?renderQualityDashboard():dashboardState.tab==='Downtime'?renderDowntimeDashboard():renderDashboardGeneral();const apply=()=>{dashboardState.filters={...dashboardState.filters,from:f.value,to:to.value};rerender();};[f,to,p,s,m].forEach(x=>x.onchange=apply);period.onchange=()=>{const r=resolvePeriod(period.value);dashboardState.filters={...dashboardState.filters,period:period.value,from:r.from,to:r.to};f.value=r.from;to.value=r.to;rerender();};c.onchange=()=>{dashboardState.filters.customer=c.value;dashboardState.filters.part='';populateDashboardFilters();rerender();};document.getElementById('dashboardClear').onclick=()=>{dashboardState.filters={period:'This Month',from:resolvePeriod('This Month').from,to:resolvePeriod('This Month').to,customer:'',part:'',shift:'',machine:''};populateDashboardFilters();rerender();};document.getElementById('dashboardRefresh').onclick=loadDashboardData;const initial=resolvePeriod(dashboardState.filters.period||'This Month');if(!dashboardState.filters.from)dashboardState.filters.from=initial.from;if(!dashboardState.filters.to)dashboardState.filters.to=initial.to;populateDashboardFilters();/* Phase 3.0.A fix: create the active tab container before data arrives, so the first visit renders without clicking a tab. */const dashEl=document.getElementById('dash'),t0=dashboardState.tab||'General';if(dashEl&&!dashEl.firstElementChild&&['General','Production','Quality','Downtime','Plant Now'].includes(t0))dashEl.innerHTML=`<div id="dashboard${t0.replace(/\s/g,'')}"></div>`;document.querySelectorAll('[data-dashboard-tab]').forEach(x=>x.classList.toggle('active',x.dataset.dashboardTab===t0));document.documentElement.dataset.dashboardTab=t0;if(dashboardDataLoaded){renderActiveDashboard();}else{loadDashboardData();}}
 
 function capture(){return head('Capture','Register production, scrap and downtime as one controlled transaction.')}
 function fields(a){return a.map(x=>`<div class="field"><label>${x}</label><input placeholder="${x}"></div>`).join('')}
@@ -1488,6 +1513,18 @@ function loadScriptOnce(src){
   });
 }
 async function ensureQrLib(){if(!window.qrcode)await loadScriptOnce('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js');}
+/* Phase 3.2.J — the machine barcode now encodes the FULL Kiosk link (so scanning it, not just the
+   QR, opens that machine's kiosk). Code 39 (used for Part Numbers) only supports uppercase
+   letters/digits/a few symbols — a URL's lowercase letters, "://" and "?" would come out as
+   unreadable dashes. CODE128 supports the full character set a URL needs, so the machine barcode
+   uses JsBarcode (verified against its published npm package, same as the QR fix) instead. */
+async function ensureBarcodeLib(){if(!window.JsBarcode)await loadScriptOnce('https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js');}
+async function renderMachineBarcodeSvg(text){
+  await ensureBarcodeLib();
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  window.JsBarcode(svg,text,{format:'CODE128',width:1.6,height:70,displayValue:true,fontSize:11,margin:8,background:'#ffffff',lineColor:'#0F1B2D'});
+  return svg.outerHTML;
+}
 /* qrcode-generator ships its actual source file at the package root (verified against the
    published npm tarball), unlike some QR packages whose CDN convention points at a build/
    folder that isn't actually published — which is why the QR never loaded before. Returns a
@@ -1533,10 +1570,11 @@ async function printMachineQr(machine){
   w.document.write(machinePrintDoc(machine,svg,'Scan to open this machine\u2019s Floor Kiosk'));
   w.document.close();
 }
-function printMachineBarcode(machine){
+async function printMachineBarcode(machine){
+  const svg=await renderMachineBarcodeSvg(kioskLinkFor(machine.code));
   const w=window.open('','_blank');
   if(!w){alert('Please allow pop-ups to print.');return;}
-  w.document.write(machinePrintDoc(machine,code39BarcodeSvg(machine.code),'Machine ID'));
+  w.document.write(machinePrintDoc(machine,svg,'Scan to open this machine\u2019s Floor Kiosk'));
   w.document.close();
 }
 function openMachineProfile(id){
@@ -1556,7 +1594,7 @@ function openMachineProfile(id){
     <div class="machine-kiosk-link"><input id="machineKioskLink" readonly value="${escAttr(kioskLinkFor(m.code))}"><button type="button" class="secondary" id="copyKioskLink">Copy</button></div>
     <div class="machine-kiosk-codes">
       <div class="machine-kiosk-code"><div id="machineQrHolder" class="machine-qr-holder"><span class="muted">Loading QR…</span></div><button type="button" class="secondary" id="printMachineQrBtn">Print QR</button></div>
-      <div class="machine-kiosk-code"><div class="machine-barcode-holder">${code39BarcodeSvg(m.code)}</div><button type="button" class="secondary" id="printMachineBarcodeBtn">Print Barcode</button></div>
+      <div class="machine-kiosk-code"><div id="machineBarcodeHolder" class="machine-barcode-holder"><span class="muted">Loading barcode…</span></div><button type="button" class="secondary" id="printMachineBarcodeBtn">Print Barcode</button></div>
     </div>
   </div>`;
   panel.style.display='block';
@@ -1572,6 +1610,9 @@ function openMachineProfile(id){
   ensureQrLib().then(()=>{
     const holder=document.getElementById('machineQrHolder');if(holder)holder.innerHTML=buildQrSvg(kioskLinkFor(m.code),4,2);
   }).catch(()=>{const holder=document.getElementById('machineQrHolder');if(holder)holder.innerHTML='<span class="muted">QR unavailable. Check your internet connection and try Refresh.</span>';});
+  renderMachineBarcodeSvg(kioskLinkFor(m.code)).then(svg=>{
+    const holder=document.getElementById('machineBarcodeHolder');if(holder)holder.innerHTML=svg;
+  }).catch(()=>{const holder=document.getElementById('machineBarcodeHolder');if(holder)holder.innerHTML='<span class="muted">Barcode unavailable. Check your internet connection and try Refresh.</span>';});
 }
 
 function closeMachineProfile(){

@@ -1,4 +1,4 @@
-> **Current release: Phase 3.2.I — New Runs module (traceability), Registers Scrap/Downtime editing, Kiosk safety (edit hours, Planned confirmation, Change Product/Finish Soon).** See `docs/PHASE_3_2_G_KIOSK_SAFETY_CHANGE_PRODUCT.md`, `docs/PHASE_3_2_H_REGISTERS_EDIT.md`, `docs/PHASE_3_2_I_RUNS_MODULE.md`.
+> **Current release: Phase 3.2.J — Finish-time validation, clearer Kiosk buttons, full-link machine barcode, Dashboard auto-refresh everywhere.** See `docs/PHASE_3_2_J_KIOSK_VALIDATION_BARCODE_AUTOREFRESH.md`.
 
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard
