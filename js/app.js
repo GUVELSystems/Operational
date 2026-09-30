@@ -85,7 +85,7 @@ const GUVEL_LEGACY_COLORS={'#0cc0df':'--chart-1','#ff3131':'--chart-2','#143980'
 function guvelHexToRgb(h){const m=/^#?([0-9a-f]{6})$/i.exec(h||'');if(!m)return null;const n=parseInt(m[1],16);return [(n>>16)&255,(n>>8)&255,n&255];}
 function guvelMapColor(v){if(typeof v!=='string')return v;const low=v.trim().toLowerCase();if(GUVEL_LEGACY_COLORS[low])return guvelToken(GUVEL_LEGACY_COLORS[low])||v;const m=/^rgba?\(\s*(12\s*,\s*192\s*,\s*223|255\s*,\s*49\s*,\s*49|20\s*,\s*57\s*,\s*128|22\s*,\s*169\s*,\s*87)\s*(?:,\s*([\d.]+))?\s*\)$/.exec(low);if(!m)return v;const key={'12,192,223':'--chart-1','255,49,49':'--chart-2','20,57,128':'--chart-2','22,169,87':'--chart-3'}[m[1].replace(/\s/g,'')];const rgb=guvelHexToRgb(guvelToken(key));if(!rgb)return v;return `rgba(${rgb.join(',')},${m[2]==null?1:m[2]})`;}
 function guvelThemeConfig(node,depth=0){if(!node||depth>8||typeof node!=='object')return node;if(Array.isArray(node)){for(let i=0;i<node.length;i++){if(typeof node[i]==='string')node[i]=guvelMapColor(node[i]);else guvelThemeConfig(node[i],depth+1);}return node;}for(const k of Object.keys(node)){const v=node[k];if(typeof v==='string'&&/color|background|border|fill/i.test(k))node[k]=guvelMapColor(v);else if(v&&typeof v==='object'&&!(v instanceof HTMLElement)&&k!=='data'||(k==='data'&&!Array.isArray(v)))guvelThemeConfig(v,depth+1);}return node;}
-function guvelChartDefaults(){if(!window.Chart)return;const d=Chart.defaults;d.font.family=guvelToken('--sans')||'Barlow, sans-serif';d.font.size=12;d.color=guvelToken('--text-2');d.borderColor=guvelToken('--line-soft');if(d.scale&&d.scale.grid)d.scale.grid.color=guvelToken('--line-soft');if(d.plugins&&d.plugins.tooltip){const t=d.plugins.tooltip;t.backgroundColor='#0F1B2D';t.titleColor='#FFFFFF';t.bodyColor='#EAF2F8';t.borderColor='#2F4463';t.borderWidth=1;t.cornerRadius=2;t.padding=10;}if(d.plugins&&d.plugins.legend&&d.plugins.legend.labels){d.plugins.legend.labels.color=guvelToken('--text-2');d.plugins.legend.labels.boxWidth=10;d.plugins.legend.labels.boxHeight=10;}}
+function guvelChartDefaults(){if(!window.Chart)return;const d=Chart.defaults;d.font.family=guvelToken('--sans')||'Manrope, sans-serif';d.font.size=12;d.color=guvelToken('--text-2');d.borderColor=guvelToken('--line-soft');if(d.scale&&d.scale.grid)d.scale.grid.color=guvelToken('--line-soft');if(d.plugins&&d.plugins.tooltip){const t=d.plugins.tooltip;t.backgroundColor='#0F1B2D';t.titleColor='#FFFFFF';t.bodyColor='#EAF2F8';t.borderColor='#2F4463';t.borderWidth=1;t.cornerRadius=2;t.padding=10;}if(d.plugins&&d.plugins.legend&&d.plugins.legend.labels){d.plugins.legend.labels.color=guvelToken('--text-2');d.plugins.legend.labels.boxWidth=10;d.plugins.legend.labels.boxHeight=10;}}
 /* =====================================================================
    Phase 3.1.B — shift-bounded Real Time slots, live session OEE, color scale
    ===================================================================== */
@@ -98,7 +98,17 @@ function shiftWindowFor(session){
   let end=new Date(day);end.setHours(b.h,b.m,b.s,0);
   if(end<=start)end=new Date(end.getTime()+86400000);
   const started=new Date(session.started_at);
-  if(started<start){start=new Date(start.getTime()-86400000);end=new Date(end.getTime()-86400000);}
+  if(started<start){
+    /* Overnight shift, started a little before the nominal boundary (e.g. clocked in at 21:50 for
+       a 22:00 start) — roll the whole window back a day and keep it as-is; this session still
+       covers the full shift. */
+    start=new Date(start.getTime()-86400000);end=new Date(end.getTime()-86400000);
+  }else if(started>start){
+    /* Phase 3.2.K — this specific session began after the shift's nominal start — most commonly
+       Change Product starting a new part mid-shift. Real Time should only ask for hours from
+       then on, not repeat the whole shift from its nominal start. */
+    start=started;
+  }
   return {start,end};
 }
 /* Hour slots clipped to the session's shift window (e.g. 07:00–16:30 only shows those hours,
@@ -360,7 +370,6 @@ const s=K.session;
           <h1>Confirm Total Hours</h1>
           <p>This part ran from ${sessionStart.toLocaleString()} to <strong>${chosenEnd.toLocaleString()}</strong>, based on the hours logged.</p>
           <div id="kioskEditTimeBox"></div>
-          <p class="kiosk-scan-msg" id="kioskTimeMsg"></p>
           <div class="kiosk-change-product">
             <button type="button" class="secondary" id="kioskEditTimeBtn">Edit</button>
             <button type="button" class="primary" id="kioskConfirmTimeBtn">Confirm Total Hours</button>
@@ -370,15 +379,26 @@ const s=K.session;
       document.getElementById('kioskBackFromCP').onclick=kioskDraw;
       document.getElementById('kioskEditTimeBtn').onclick=()=>{
         const box=document.getElementById('kioskEditTimeBox');
-        box.innerHTML=`<label class="kiosk-qty-label">Actual end time<input type="datetime-local" id="kioskEndTimeInput" value="${kioskFormatDateTimeLocal(chosenEnd)}" min="${kioskFormatDateTimeLocal(sessionStart)}" max="${kioskFormatDateTimeLocal(new Date())}"></label><p class="kiosk-hint">Must be after this part started, ${sessionStart.toLocaleString()}.</p>`;
+        box.innerHTML=`<label class="kiosk-qty-label">Actual end time<input type="datetime-local" id="kioskEndTimeInput" value="${kioskFormatDateTimeLocal(chosenEnd)}"></label><p class="kiosk-hint">Normally after this part started, ${sessionStart.toLocaleString()}.</p><div id="kioskTimeWarningHost"></div>`;
       };
       document.getElementById('kioskConfirmTimeBtn').onclick=()=>{
-        const msg=document.getElementById('kioskTimeMsg');
         const input=document.getElementById('kioskEndTimeInput');
         let candidate=chosenEnd;
         if(input&&input.value){const v=new Date(input.value);if(!isNaN(v))candidate=v;}
-        if(candidate<sessionStart){msg.textContent=`The end time can't be before this part started (${sessionStart.toLocaleString()}).`;return;}
-        if(candidate>new Date()){msg.textContent="The end time can't be in the future.";return;}
+        const beforeStart=candidate<sessionStart,afterNow=candidate>new Date();
+        if(beforeStart||afterNow){
+          const warnHost=document.getElementById('kioskTimeWarningHost')||document.getElementById('kioskEditTimeBox');
+          const warnText=beforeStart
+            ?`This end time is before this part started (${sessionStart.toLocaleString()}). If you continue, the session's own start time will be used instead so it can be saved.`
+            :"This end time is in the future. If you continue, the current time will be used instead.";
+          warnHost.innerHTML=`<div class="kiosk-warning"><strong>⚠ Heads up</strong><p>${escapeHtml(warnText)}</p><div class="kiosk-change-product"><button type="button" class="secondary" id="kioskTimeWarnCancel">Go back</button><button type="button" class="primary" id="kioskTimeWarnContinue">Continue anyway</button></div></div>`;
+          document.getElementById('kioskTimeWarnCancel').onclick=()=>{warnHost.innerHTML='';};
+          document.getElementById('kioskTimeWarnContinue').onclick=()=>{
+            chosenEnd=beforeStart?sessionStart:new Date();
+            kioskChangeProductStep3(supervisor,chosenEnd);
+          };
+          return;
+        }
         chosenEnd=candidate;
         kioskChangeProductStep3(supervisor,chosenEnd);
       };
@@ -1513,18 +1533,6 @@ function loadScriptOnce(src){
   });
 }
 async function ensureQrLib(){if(!window.qrcode)await loadScriptOnce('https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js');}
-/* Phase 3.2.J — the machine barcode now encodes the FULL Kiosk link (so scanning it, not just the
-   QR, opens that machine's kiosk). Code 39 (used for Part Numbers) only supports uppercase
-   letters/digits/a few symbols — a URL's lowercase letters, "://" and "?" would come out as
-   unreadable dashes. CODE128 supports the full character set a URL needs, so the machine barcode
-   uses JsBarcode (verified against its published npm package, same as the QR fix) instead. */
-async function ensureBarcodeLib(){if(!window.JsBarcode)await loadScriptOnce('https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js');}
-async function renderMachineBarcodeSvg(text){
-  await ensureBarcodeLib();
-  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  window.JsBarcode(svg,text,{format:'CODE128',width:1.6,height:70,displayValue:true,fontSize:11,margin:8,background:'#ffffff',lineColor:'#0F1B2D'});
-  return svg.outerHTML;
-}
 /* qrcode-generator ships its actual source file at the package root (verified against the
    published npm tarball), unlike some QR packages whose CDN convention points at a build/
    folder that isn't actually published — which is why the QR never loaded before. Returns a
@@ -1538,9 +1546,10 @@ function buildQrSvg(text,cellSize,margin){
 function kioskLinkFor(code){return `${window.location.origin}${window.location.pathname}?kiosk=${encodeURIComponent(code)}`;}
 function machinePrintDoc(machine,bodyHtml,caption){
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(machine.code)} — GUVEL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&display=swap" rel="stylesheet">
   <style>
     @page{margin:0}
-    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#EAF2F8;font-family:Georgia,'Times New Roman',serif}
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#EAF2F8;font-family:'Manrope',system-ui,Arial,sans-serif}
     .card{width:340px;background:#fff;border:2px solid #0F1B2D;padding:30px 26px;text-align:center;clip-path:polygon(0 0,calc(100% - 16px) 0,100% 9px,100% 100%,0 100%)}
     .brand{font-weight:700;font-size:21px;letter-spacing:.1em;color:#0F1B2D}
     .tagline{font-size:10px;letter-spacing:.14em;color:#0CC0DF;margin-top:3px;text-transform:uppercase}
@@ -1570,11 +1579,10 @@ async function printMachineQr(machine){
   w.document.write(machinePrintDoc(machine,svg,'Scan to open this machine\u2019s Floor Kiosk'));
   w.document.close();
 }
-async function printMachineBarcode(machine){
-  const svg=await renderMachineBarcodeSvg(kioskLinkFor(machine.code));
+function printMachineBarcode(machine){
   const w=window.open('','_blank');
   if(!w){alert('Please allow pop-ups to print.');return;}
-  w.document.write(machinePrintDoc(machine,svg,'Scan to open this machine\u2019s Floor Kiosk'));
+  w.document.write(machinePrintDoc(machine,code39BarcodeSvg(machine.code),'Machine ID'));
   w.document.close();
 }
 function openMachineProfile(id){
@@ -1594,7 +1602,7 @@ function openMachineProfile(id){
     <div class="machine-kiosk-link"><input id="machineKioskLink" readonly value="${escAttr(kioskLinkFor(m.code))}"><button type="button" class="secondary" id="copyKioskLink">Copy</button></div>
     <div class="machine-kiosk-codes">
       <div class="machine-kiosk-code"><div id="machineQrHolder" class="machine-qr-holder"><span class="muted">Loading QR…</span></div><button type="button" class="secondary" id="printMachineQrBtn">Print QR</button></div>
-      <div class="machine-kiosk-code"><div id="machineBarcodeHolder" class="machine-barcode-holder"><span class="muted">Loading barcode…</span></div><button type="button" class="secondary" id="printMachineBarcodeBtn">Print Barcode</button></div>
+      <div class="machine-kiosk-code"><div class="machine-barcode-holder">${code39BarcodeSvg(m.code)}</div><button type="button" class="secondary" id="printMachineBarcodeBtn">Print Barcode</button></div>
     </div>
   </div>`;
   panel.style.display='block';
@@ -1610,9 +1618,6 @@ function openMachineProfile(id){
   ensureQrLib().then(()=>{
     const holder=document.getElementById('machineQrHolder');if(holder)holder.innerHTML=buildQrSvg(kioskLinkFor(m.code),4,2);
   }).catch(()=>{const holder=document.getElementById('machineQrHolder');if(holder)holder.innerHTML='<span class="muted">QR unavailable. Check your internet connection and try Refresh.</span>';});
-  renderMachineBarcodeSvg(kioskLinkFor(m.code)).then(svg=>{
-    const holder=document.getElementById('machineBarcodeHolder');if(holder)holder.innerHTML=svg;
-  }).catch(()=>{const holder=document.getElementById('machineBarcodeHolder');if(holder)holder.innerHTML='<span class="muted">Barcode unavailable. Check your internet connection and try Refresh.</span>';});
 }
 
 function closeMachineProfile(){
@@ -1888,7 +1893,8 @@ async function loadMembership(){
   if(error) throw error;
   if(!data || !data.length) return null;
   const m=data[0]; activeCompanyId=m.company_id;
-  document.getElementById('companyBadge').textContent=(m.companies?.name||'Company')+' · '+m.role;
+  document.getElementById('companyBadgeLine1').textContent=(m.companies?.name||'Company')+' · '+m.role;
+  document.getElementById('companyBadgeLine2').textContent=currentUser?.user_metadata?.full_name||currentUser?.email||'';
   return m;
 }
 async function bootstrapSession(){
@@ -2105,6 +2111,48 @@ async function renderStatusFoundation(force=false){
   };
 
   const closeModal=()=>{modal.hidden=true;modal.innerHTML='';document.body.classList.remove('status-modal-open');};
+  /* Phase 3.2.K — a supervisor who was sent here by Kiosk's Start/Finish hand-off must confirm
+     their PIN again before leaving this screen (X, backdrop, or the panel's own Close button) —
+     otherwise this open Production tab, and every other machine in it, would sit unlocked on the
+     tablet after they walk away. Confirming sends the device straight back to that one machine's
+     Kiosk rather than leaving it free in Production. */
+  const statusKioskExitGate=()=>new Promise(resolve=>{
+    const supervisors=personnel.filter(p=>p.role==='Supervisor'&&p.is_active);
+    const overlay=document.createElement('div');
+    overlay.className='kiosk-gate';
+    overlay.innerHTML=`<div class="kiosk-gate-card">
+      <h2>Leave this screen?</h2><p>A supervisor must confirm before leaving Production while a Floor Kiosk hand-off is in progress. Confirming returns this device to its Kiosk.</p>
+      <label>Supervisor<select id="statusKioskGateSup">${supervisors.length?supervisors.map(p=>`<option value="${p.id}">${escapeHtml(fullName(p))}</option>`).join(''):'<option value="">No supervisors registered</option>'}</select></label>
+      <label>PIN<input id="statusKioskGatePin" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>
+      <div class="kiosk-gate-msg" id="statusKioskGateMsg"></div>
+      <div class="kiosk-gate-actions"><button type="button" class="secondary" id="statusKioskGateCancel">Stay here</button><button type="button" class="primary" id="statusKioskGateOk">Leave</button></div>
+    </div>`;
+    document.body.appendChild(overlay);
+    const cleanup=result=>{overlay.remove();resolve(result);};
+    overlay.querySelector('#statusKioskGateCancel').onclick=()=>cleanup(false);
+    const pinInput=overlay.querySelector('#statusKioskGatePin');
+    const doCheck=async()=>{
+      const msg=overlay.querySelector('#statusKioskGateMsg'),sel=overlay.querySelector('#statusKioskGateSup'),btn=overlay.querySelector('#statusKioskGateOk');
+      if(!sel.value){msg.textContent='No supervisor available to authorize this.';return;}
+      btn.disabled=true;btn.textContent='Checking…';
+      const r=await sb.rpc('verify_personnel_pin',{p_person_id:sel.value,p_pin:pinInput.value});
+      if(r.error||r.data!==true){msg.textContent='Incorrect PIN.';btn.disabled=false;btn.textContent='Leave';pinInput.value='';pinInput.focus();return;}
+      cleanup(true);
+    };
+    overlay.querySelector('#statusKioskGateOk').onclick=doCheck;
+    pinInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();doCheck();}});
+    pinInput.focus();
+  });
+  const guardedClose=async(thenRefresh)=>{
+    if(window.__guvelKioskReturn){
+      const ok=await statusKioskExitGate();
+      if(!ok)return;
+      window.location.href=window.location.pathname+'?kiosk='+encodeURIComponent(window.__guvelKioskReturn);
+      return;
+    }
+    closeModal();
+    if(thenRefresh)await renderStatusFoundation();
+  };
   const openMachineProfile=async (machineId)=>{
     const machine=machines.find(x=>x.id===machineId); if(!machine)return;
     const s=active.find(x=>x.machine_id===machineId);
@@ -2124,7 +2172,7 @@ async function renderStatusFoundation(force=false){
       ${s?`<div class="status-modal-section"><h3>Active Production Session</h3><div class="status-active-detail"><div><span>Customer</span><strong>${escapeHtml(s.customers?.name||'—')}</strong></div><div><span>Part Number</span><strong>${escapeHtml(s.part_numbers?.part_number||'—')}</strong></div><div><span>Lot Number</span><strong>${escapeHtml(s.lot_number||'—')}</strong></div><div><span>Shift</span><strong>${escapeHtml(s.shifts?.code||'—')}</strong></div><div><span>Operation</span><strong>${escapeHtml(s.operations?.operation_number||'—')}</strong></div><div><span>Started</span><strong>${s.started_at?new Date(s.started_at).toLocaleString():'—'}</strong></div><div><span>Operator</span><strong>${escapeHtml(personIdName(s.operator_id)||'—')}</strong></div><div><span>Supervisor</span><strong>${escapeHtml(personIdName(s.supervisor_id)||'—')}</strong></div></div><div class="status-modal-actions"><button type="button" class="secondary" id="statusModalRealtime">Real Time</button><button type="button" class="danger" id="statusModalFinish">Finish Session</button></div></div>`:`<div class="status-modal-section"><h3>Start Production</h3><form id="statusStartForm" class="form-grid status-modal-form"><div class="field"><label>Shift *</label><select id="stShift" required><option value="">Select shift</option>${shifts.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.name||'')}</option>`).join('')}</select></div><div class="field"><label>Customer *</label><select id="stCustomer" required><option value="">Select customer</option>${customers.map(x=>`<option value="${x.id}">${escapeHtml(x.code)} — ${escapeHtml(x.name||'')}</option>`).join('')}</select></div><div class="field"><label>Part Number *</label><select id="stPart" required><option value="">Select part number</option>${parts.filter(x=>machinePartIds.has(String(x.id))).map(x=>`<option value="${x.id}" data-customer="${x.customer_id}">${escapeHtml(x.part_number)} — ${escapeHtml(x.description||'')}</option>`).join('')}</select></div><div class="field"><label>Lot Number *</label><input id="stLot" required maxlength="120" autocomplete="off"></div><div class="field status-operation-field"><label>Operation <span id="stOperationRequiredHint">(select part number)</span></label><select id="stOperation" disabled><option value="">Select operation</option></select><small id="stOperationHint" class="field-hint">Select a part number to load its operations.</small></div><div class="field"><label>Operator</label><select id="stOperator"><option value="">Select operator</option>${personnel.filter(x=>x.role==='Operator').map(x=>`<option value="${x.id}">${escapeHtml(fullName(x))}</option>`).join('')}</select></div><div class="field"><label>Supervisor</label><select id="stSupervisor"><option value="">Select supervisor</option>${personnel.filter(x=>x.role==='Supervisor').map(x=>`<option value="${x.id}">${escapeHtml(fullName(x))}</option>`).join('')}</select></div><div class="form-actions"><button class="primary" id="statusStartButton" type="submit">Start Production</button><div id="statusMsg" class="status" role="status" aria-live="polite"></div></div></form></div>`}
     </section>`;
     modal.hidden=false;document.body.classList.add('status-modal-open');
-    modal.querySelectorAll('[data-close-modal],.status-modal-close').forEach(el=>el.addEventListener('click',closeModal));
+    modal.querySelectorAll('[data-close-modal],.status-modal-close').forEach(el=>el.addEventListener('click',()=>guardedClose(false)));
     if(s){
       modal.querySelector('#statusModalRealtime').addEventListener('click',()=>openHourPanel(false));
       modal.querySelector('#statusModalFinish').addEventListener('click',()=>openFinishCapture());
@@ -2144,7 +2192,7 @@ async function renderStatusFoundation(force=false){
         <div class="field" style="grid-column:1/-1"><label>Scrap entries (optional)</label><div id="finishScrapRows"></div><button type="button" class="secondary" id="addFinishScrap">+ Add Scrap</button></div>
         <div class="field" style="grid-column:1/-1"><label>Downtime entries (optional)</label><div id="finishDowntimeRows"></div><button type="button" class="secondary" id="addFinishDowntime">+ Add Downtime</button></div>
         <div class="form-actions"><button class="primary" type="submit" id="saveFinishButton">Save and Finish Session</button><div id="finishMsg" class="status" role="status" aria-live="polite"></div></div></form>`;
-        modal.querySelectorAll('.status-modal-close').forEach(el=>el.addEventListener('click',closeModal));
+        modal.querySelectorAll('.status-modal-close').forEach(el=>el.addEventListener('click',()=>guardedClose(false)));
         modal.querySelector('#backToHours')?.addEventListener('click',()=>openHourPanel(true));
         const scrapCatalog=window.__guvelFinishScrapCatalog||[]; const downtimeCatalog=window.__guvelFinishDowntimeCatalog||[];
         const scrapRows=modal.querySelector('#finishScrapRows'),dtRows=modal.querySelector('#finishDowntimeRows');
@@ -2240,7 +2288,7 @@ const __cats=await getCatalogsCached();window.__guvelFinishScrapCatalog=__cats.s
           ${hiddenOlder>0?`<p class="field-hint" style="margin:8px 0 0">Showing the most recent 24 hours of this ${allSlots.length}-hour session. Earlier hours (${hiddenOlder}) are still counted in the totals above.</p>`:''}
           <div class="hour-row-list">${rowsHtml}</div>
           <div class="form-actions hour-panel-actions">${finishMode?`<button type="button" class="primary" id="confirmFinishSession">Confirm and Finish Session</button>`:`<button type="button" class="secondary" id="closeRealtimePanel">Close</button>`}<div id="hourPanelMsg" class="status" role="status" aria-live="polite"></div></div>`;
-          const refreshClose=async()=>{closeModal();await renderStatusFoundation();};
+          const refreshClose=()=>guardedClose(true);
           modal.querySelectorAll('.status-modal-close').forEach(el=>el.addEventListener('click',refreshClose));
           modal.querySelector('#closeRealtimePanel')?.addEventListener('click',refreshClose);
           modal.querySelector('#hourOverrideToggle')?.addEventListener('change',e=>{override=e.target.checked;draw();});
@@ -2783,15 +2831,16 @@ function printRunProfile(r){
   const scrapRows=r.scrapRows.map(x=>`<tr><td>${escapeHtml(x.scrap_catalog?.code||'—')}</td><td>${escapeHtml(x.scrap_catalog?.defect||'—')}</td><td>${x.quantity}</td><td>${escapeHtml(x.reason||'—')}</td></tr>`).join('')||'<tr><td colspan="4">No scrap events.</td></tr>';
   const downRows=r.downRows.map(x=>`<tr><td>${escapeHtml(x.downtime_catalog?.code||'—')}</td><td>${escapeHtml(x.downtime_catalog?.downtime||'—')}</td><td>${escapeHtml(x.event_type||'—')}</td><td>${Number(x.minutes||0)}</td><td>${escapeHtml(x.reason||'—')}</td></tr>`).join('')||'<tr><td colspan="5">No downtime events.</td></tr>';
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${runNumberLabel(r)} — GUVEL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     @page{margin:16mm}
-    body{font-family:Arial,Helvetica,sans-serif;color:#0F1B2D;margin:0;font-size:12.5px;max-width:920px;margin:0 auto;padding:0 12px}
+    body{font-family:'Manrope',system-ui,Arial,sans-serif;color:#0F1B2D;margin:0;font-size:12.5px;max-width:920px;margin:0 auto;padding:0 12px}
     .letterhead{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:3px solid #0F1B2D;padding-bottom:10px;margin-bottom:16px}
-    .brand{font-family:Georgia,'Times New Roman',serif;font-weight:700;font-size:22px;letter-spacing:.1em}
+    .brand{font-family:'Manrope',system-ui,Arial,sans-serif;font-weight:800;font-size:22px;letter-spacing:.08em}
     .tagline{font-size:10px;letter-spacing:.12em;color:#0CC0DF;text-transform:uppercase;margin-top:2px}
     .runid{text-align:right}
     .runid span{font-size:10px;color:#52647A;letter-spacing:.06em}
-    .runid strong{font-size:22px;display:block;font-family:Georgia,serif}
+    .runid strong{font-size:22px;display:block;font-family:'Manrope',system-ui,Arial,sans-serif;font-weight:800}
     h2{font-size:13px;margin:18px 0 8px;border-bottom:1px solid #C9D6E2;padding-bottom:4px;text-transform:uppercase;letter-spacing:.04em;color:#0F1B2D}
     .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 18px;margin-bottom:6px}
     .grid div span{display:block;font-size:9.5px;color:#52647A;text-transform:uppercase;letter-spacing:.04em}

@@ -1,4 +1,4 @@
-> **Current release: Phase 3.2.J — Finish-time validation, clearer Kiosk buttons, full-link machine barcode, Dashboard auto-refresh everywhere.** See `docs/PHASE_3_2_J_KIOSK_VALIDATION_BARCODE_AUTOREFRESH.md`.
+> **Current release: Phase 3.2.K — Soft time warning, Change Product shift fix, kiosk exit lock, Manrope everywhere.** See `docs/PHASE_3_2_K_SOFT_WARNING_SHIFT_FIX_FONT_SECURITY.md`.
 
 
 # GUVEL Operational — Phase 1.9.C — Production Dashboard
