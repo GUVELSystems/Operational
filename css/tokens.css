@@ -1,0 +1,35 @@
+/* tokens.css — design tokens (los componentes SOLO consumen estas variables) */
+:root, :root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #EAF2F8; --surface: #FFFFFF; --surface-2: #F2F7FB; --surface-3: #E4EDF5;
+  --ink: #0F1B2D; --text-2: #4A6183; --text-3: #7F93AE;
+  --brand: #0CC0DF; --brand-ink: #0A6C80; --brand-hover: #6C87AE; --brand-soft: #B4D4F0; --on-brand: #0F1B2D;
+  --line: #D3E0EC; --line-soft: #E3ECF4;
+  --neg: #E07A6B; --neg-bg: #FBEAE7; --pos: #1E9E6A; --pos-bg: #DDF3E9;
+  --state-run: #1FB37A; --state-watch: #E8A92B; --state-stop: #E07A6B; --state-idle: #8DA0B8;
+  --chart-1: #0CC0DF; --chart-2: #7C5CFF; --chart-3: #6C87AE;
+  --p-green: #D6F0E4; --p-peach: #FCE3D3; --p-blue: #D3E6F8; --p-gold: #F8EBC2; --p-lilac: #E3DDF9; --p-rose: #F9DCE5;
+  --flow: #22D3EE; --ai-1: #7C5CFF; --ai-2: #0CC0DF;
+  --shadow-card: 0 1px 2px rgba(15,27,45,.05), 0 6px 18px rgba(15,27,45,.04);
+  --shadow-float: 0 18px 50px rgba(15,27,45,.22);
+  --ring-a: var(--chart-1); --ring-p: var(--chart-2); --ring-q: var(--state-run);
+  --logo-light: #0F1B2D; --logo-cyan: #0CC0DF;
+  --font: Inter, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --serif: "Old Standard TT", "Bodoni MT", Didot, Georgia, "Times New Roman", serif;
+  --r-sm: 12px; --r-md: 16px; --r-lg: 20px; --gutter: 22px;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0F1B2D; --surface: #1B2A40; --surface-2: #22344D; --surface-3: #2A405C;
+  --ink: #EAF2F8; --text-2: #A8BAD3; --text-3: #7F93AE;
+  --brand: #22D3EE; --brand-ink: #7BE3F5; --brand-hover: #6C87AE; --brand-soft: #1E4A63; --on-brand: #0F1B2D;
+  --line: #2C415C; --line-soft: #26384F;
+  --neg: #F08C7D; --neg-bg: #4A2B30; --pos: #3DD598; --pos-bg: #1B4636;
+  --state-run: #3DD598; --state-watch: #F2B94A; --state-stop: #F08C7D; --state-idle: #6E83A0;
+  --chart-1: #22D3EE; --chart-2: #9B83FF; --chart-3: #6C87AE;
+  --p-green: #1F4A3B; --p-peach: #4F3A33; --p-blue: #1F3F5E; --p-gold: #4C4327; --p-lilac: #38305F; --p-rose: #4F2F3E;
+  --flow: #22D3EE; --ai-1: #8F73FF; --ai-2: #22D3EE;
+  --shadow-card: 0 1px 2px rgba(0,0,0,.25), 0 8px 22px rgba(0,0,0,.18);
+  --shadow-float: 0 18px 50px rgba(0,0,0,.5);
+  --logo-light: #EAF2F8; --logo-cyan: #0CC0DF;
+}

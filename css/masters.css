@@ -1,0 +1,18 @@
+/* masters.css — Customers, Machines, Personnel, Settings (+ utilidades reutilizables) */
+.crud-top { display: grid; gap: 12px; margin-bottom: 14px; }
+.crud-top .toolbar { margin-bottom: 0; }
+.crud-top .search-input { max-width: 460px; }
+.crud-list { padding: 8px 14px 14px; }
+.crud-list .data-table td.actions { width: 1%; }
+.person-cell { display: inline-flex; align-items: center; gap: 10px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.profile-block { display: grid; gap: 10px; }
+.shift-preview { margin-top: 14px; }
+.settings-body > .panel + .panel { margin-top: 16px; }
+.master-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.master-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); }
+.crud-list tr.clickable { cursor: pointer; }
+@media (max-width: 720px) {
+  .crud-list { padding: 4px 8px 10px; }
+  .crud-top .search-input { max-width: none; }
+}

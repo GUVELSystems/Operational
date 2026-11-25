@@ -1,0 +1,6 @@
+/* parts.css — perfil de número de parte */
+.part-meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.panel-soft { padding: 14px 16px; border-radius: var(--r-md); background: var(--surface-2); margin-bottom: 16px; }
+.barcode-card { display: grid; justify-items: center; gap: 12px; padding: 22px 10px; }
+.barcode-box { background: #fff; padding: 16px 22px; border-radius: var(--r-md); box-shadow: var(--shadow-card); max-width: 100%; }
+.barcode-svg { display: block; width: min(440px, 80vw); height: auto; }

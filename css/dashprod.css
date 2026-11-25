@@ -1,0 +1,56 @@
+/* dashprod.css — vista Production del Dashboard (KPIs, reactor, flujo, odómetro, pérdidas, tendencia, flota, panel lateral) */
+.pd-scope { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; margin-bottom: 14px; border-radius: var(--r-md); background: var(--brand-soft); color: var(--ink); font-size: 13px; } .pd-scope[hidden] { display: none; } .pd-scope span { display: inline-flex; align-items: center; gap: 8px; }
+.pd-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; } .pd-kpis .kpi-value { font-size: 30px; }
+.pd-main { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; margin-top: 16px; } .pd-row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+.pd-main .panel, .pd-row3 .panel { display: flex; flex-direction: column; gap: 10px; } .panel-head p { margin: 2px 0 0; }
+.pd-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+/* barras */
+.pd-track { position: relative; height: 8px; margin-top: 10px; border-radius: 99px; background: var(--surface-3); overflow: visible; } .pd-track > i { display: block; height: 100%; border-radius: 99px; background: var(--brand); transition: width .6s cubic-bezier(.2,.9,.3,1); }
+.pd-track > b { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--ink); border-radius: 2px; }
+.pd-thick { height: 12px; } .pd-thin { height: 6px; margin: 0; display: block; } .pd-multi { display: flex; overflow: hidden; } .pd-multi > i { border-radius: 0; }
+.s-run { background: var(--state-run) !important; } .s-watch { background: var(--state-watch) !important; } .s-stop { background: var(--state-stop) !important; } .s-idle { background: var(--state-idle) !important; } .s-a { background: var(--ring-a) !important; } .s-p { background: var(--ring-p) !important; } .s-q { background: var(--ring-q) !important; }
+/* reactor */
+.pd-reactor-body { position: relative; display: grid; place-items: center; padding: 4px 0; } .pd-reactor-svg { width: min(320px, 100%); height: auto; }
+.pd-reactor-svg .ring-track { stroke: var(--surface-3); } .pd-reactor-svg .pd-dash { stroke: var(--line); stroke-dasharray: 2 5; } .pd-ptr { stroke: var(--ink); stroke-width: 2.5; } .pd-ptr-f { fill: var(--ink); }
+.pd-reactor-svg .pd-ring { transition: stroke-dashoffset .9s cubic-bezier(.2,.9,.3,1); }
+.pd-core { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 4px; pointer-events: none; } .pd-core span { font-size: 11px; letter-spacing: .12em; font-weight: 700; color: var(--text-2); } .pd-core b { font-size: 36px; line-height: 1; font-variant-numeric: tabular-nums; } .pd-core em { font-style: normal; font-size: 11px; }
+.pd-legends { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pd-legend { text-align: left; display: grid; gap: 2px; padding: 10px 12px; border: 0; border-radius: var(--r-md); background: var(--surface-2); color: var(--ink); cursor: pointer; font: inherit; transition: transform .15s, background .15s; } .pd-legend:hover { transform: translateY(-2px); background: var(--surface-3); }
+.pd-lg-h { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-2); } .pd-lg-h i { width: 10px; height: 10px; border-radius: 50%; } .la .pd-lg-h i { background: var(--ring-a); } .lp .pd-lg-h i { background: var(--ring-p); } .lq .pd-lg-h i { background: var(--ring-q); }
+.pd-legend strong { font-size: 20px; font-variant-numeric: tabular-nums; } .pd-legend small { color: var(--text-2); font-size: 11.5px; }
+/* flujo */
+.pd-flow-svg { width: 100%; height: auto; max-height: 270px; } .pd-st-l { font: 700 10.5px var(--font); fill: var(--ink); letter-spacing: .04em; } .pd-st-v { font: 750 18px var(--font); fill: var(--ink); } .pd-st-p { font: 700 12px var(--font); } .pd-loss-t { font: 700 11px var(--font); }
+.pd-stage, .pd-loss { cursor: pointer; } .pd-stage:hover rect { fill-opacity: .28; }
+.pd-bottleneck { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 14px; margin-top: auto; border-radius: var(--r-md); background: linear-gradient(100deg, var(--neg-bg), var(--surface-2)); }
+.pd-bn-ico { position: relative; width: 48px; height: 48px; flex: none; }
+.pd-bn-ico > span { position: absolute; inset: 0; display: grid; place-items: center; }
+.pd-bn-ico .ramiro-orb { --s: 48px; } .pd-sw-a { animation: pdSwA 5s ease-in-out infinite; }
+.pd-sw-b { border-radius: 50%; background: var(--neg); color: #fff; opacity: 0; transform: scale(.4) rotate(-25deg); animation: pdSwB 5s ease-in-out infinite; }
+@keyframes pdSwA { 0%, 38% { opacity: 1; transform: scale(1); } 46%, 88% { opacity: 0; transform: scale(.4) rotate(25deg); } 96%, 100% { opacity: 1; transform: scale(1); } }
+@keyframes pdSwB { 0%, 40% { opacity: 0; transform: scale(.4) rotate(-25deg); box-shadow: 0 0 0 0 transparent; } 48% { opacity: 1; transform: scale(1.12) rotate(0); } 52%, 82% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, var(--neg) 55%, transparent); } 70% { box-shadow: 0 0 0 10px transparent; } 90%, 100% { opacity: 0; transform: scale(.4) rotate(25deg); } }
+.reduce-motion .pd-sw-a, .reduce-motion .pd-sw-b { animation: none; } .reduce-motion .pd-sw-b { display: none; } .pd-bn-txt { flex: 1; min-width: 200px; } .pd-bn-txt > div { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .pd-bn-txt p { margin: 3px 0 0; font-size: 13px; color: var(--text-2); } .pd-bn-txt p b { color: var(--ink); }
+/* odómetro */
+.pd-odo-lab { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-2); }
+.pd-drums { display: flex; align-items: flex-end; gap: 6px; } .pd-drums small { margin: 0 0 6px 4px; font-size: 11px; font-weight: 700; color: var(--text-2); }
+.pd-drum { position: relative; display: grid; place-items: center; min-width: 38px; height: 52px; border-radius: 8px; font-size: 26px; font-weight: 750; font-variant-numeric: tabular-nums; color: var(--ink); background: linear-gradient(180deg, var(--surface) 0%, var(--surface-2) 48%, var(--surface-3) 52%, var(--surface-2) 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), inset 0 -2px 4px rgba(15,27,45,.12), 0 2px 5px rgba(15,27,45,.12); }
+.pd-drum::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(15,27,45,.28); } .pd-drum.last { color: var(--brand); }
+.pd-odo-row, .pd-odo-foot { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-2); } .pd-odo-row { padding: 9px 12px; border-radius: var(--r-sm); background: var(--surface-2); } .pd-odo-row b, .pd-odo-foot b, .pd-vern b { color: var(--ink); } .pd-odo-foot { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line-soft); align-items: center; }
+.pd-vern-h, .pd-vern-f { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-2); } .pd-vern-f { margin-top: 4px; font-size: 11px; }
+/* pérdidas */
+.pd-losses { display: grid; gap: 4px; } .pd-loss-row { display: grid; gap: 5px; text-align: left; padding: 8px 10px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--ink); font: inherit; cursor: pointer; transition: background .15s; } .pd-loss-row:hover { background: var(--surface-2); }
+.pd-lr-h { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; } .pd-lr-h > span { font-weight: 700; white-space: nowrap; } .pd-loss-row small { font-size: 11.5px; }
+/* flota */
+.pd-fleet { margin-top: 16px; } .pd-frow { cursor: pointer; transition: background .15s; } .pd-frow:hover, .pd-frow:focus-visible { background: var(--surface-2); outline: none; } .pd-frow.sel { background: var(--brand-soft); }
+.pd-mini { display: flex; align-items: center; gap: 8px; min-width: 120px; font-size: 12.5px; font-variant-numeric: tabular-nums; } .pd-mini span { width: 46px; } .pd-mini i { flex: 1; height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; } .pd-mini i b { display: block; height: 100%; border-radius: 99px; }
+/* panel lateral */
+.pd-drawer { position: fixed; inset: 0; z-index: 400; pointer-events: none; } .pd-drawer.open { pointer-events: auto; }
+.pd-d-back { position: absolute; inset: 0; background: rgba(15,27,45,.45); backdrop-filter: blur(3px); opacity: 0; transition: opacity .25s; } .pd-drawer.open .pd-d-back { opacity: 1; }
+.pd-d-panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(560px, 100%); display: flex; flex-direction: column; background: var(--surface); box-shadow: var(--shadow-float); transform: translateX(100%); transition: transform .28s cubic-bezier(.2,.9,.3,1); } .pd-drawer.open .pd-d-panel { transform: none; }
+.pd-d-panel header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 22px; background: var(--surface-2); border-bottom: 1px solid var(--line); } .pd-d-panel header h3 { margin-top: 8px; font-size: 19px; }
+.pd-d-body { flex: 1; overflow: auto; padding: 20px 22px; display: grid; gap: 12px; align-content: start; } .pd-d-body h4 { margin-top: 6px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-2); }
+.pd-d-panel footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 22px; border-top: 1px solid var(--line); background: var(--surface-2); }
+.pd-d-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; } .pd-d-stat { display: grid; gap: 2px; padding: 12px; border-radius: var(--r-md); background: var(--surface-2); } .pd-d-stat span { font-size: 11.5px; color: var(--text-2); } .pd-d-stat b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.pd-d-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 13px; } .pd-d-row i { grid-column: 1 / -1; height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; } .pd-d-row i b { display: block; height: 100%; background: var(--brand); border-radius: 99px; }
+.pd-d-audit { display: grid; gap: 4px; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); font-size: 13px; }
+@media (max-width: 1100px) { .pd-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pd-main, .pd-row3 { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .pd-kpis { grid-template-columns: 1fr; } .pd-legends, .pd-d-stats { grid-template-columns: 1fr; } }

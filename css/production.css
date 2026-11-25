@@ -1,0 +1,41 @@
+/* production.css — tarjetas de máquina, perfil, Real Time, Finish Session */
+.machine-grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); }
+.machine-card { text-align: left; display: grid; gap: 12px; align-content: start; padding: 18px; border: 0; border-radius: var(--r-lg); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-card); cursor: pointer; position: relative; overflow: hidden; transition: transform .2s cubic-bezier(.3,1.4,.5,1), box-shadow .2s; min-height: 150px; }
+.machine-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--state-idle); }
+.machine-card.is-running::before { background: var(--state-run); }
+.machine-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-float); }
+.mc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.mc-head > div { display: grid; line-height: 1.25; min-width: 0; } .mc-code { font-size: 19px; letter-spacing: .02em; }
+.mc-sess { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.mc-sess dt, .recap-grid dt { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.mc-sess dd, .recap-grid dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.mc-idle { align-self: end; }
+.idle-chip { background: var(--surface-3); }
+.recap-grid { margin: 0 0 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px 18px; padding: 14px 16px; border-radius: var(--r-md); background: var(--surface-2); }
+.profile-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+.sec-title { font-size: 14px; font-weight: 700; margin: 4px 0 10px; }
+.totals-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 0 0 14px; }
+.totals-bar .tot { display: grid; gap: 2px; padding: 10px 14px; border-radius: var(--r-md); background: var(--surface-2); }
+.totals-bar .tot span { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-2); }
+.totals-bar .tot b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.hours-list { display: grid; gap: 8px; }
+.hour-block { border-radius: var(--r-md); background: var(--surface-2); overflow: hidden; }
+.hour-row { display: grid; grid-template-columns: 150px 1fr auto; align-items: center; gap: 12px; padding: 10px 14px; }
+.hour-row.logged .hr-range { color: var(--ink); } .hr-range { font-weight: 700; font-variant-numeric: tabular-nums; }
+.hr-vals { display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--text-2); }
+.hr-vals b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.hr-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.hour-editor { padding: 6px 14px 14px; border-top: 1px dashed var(--line); background: var(--surface); }
+.editor-actions { margin-top: 12px; }
+.lines { margin-top: 14px; } .lines-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.lines-body { display: grid; gap: 8px; }
+.line-row { display: grid; grid-template-columns: minmax(150px, 2fr) 90px minmax(120px, 2fr) 38px; gap: 8px; align-items: center; }
+.line-row.down-line { grid-template-columns: minmax(150px, 2fr) 90px 120px minmax(110px, 2fr) 38px; }
+.line-row .input { height: 38px; }
+.review-tools { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; margin: 4px 0 14px; padding: 12px 14px; border-radius: var(--r-md); background: var(--surface-2); }
+.rt-tot:empty { display: none; }
+@media (max-width: 720px) {
+  .hour-row { grid-template-columns: 1fr auto; } .hr-vals { grid-column: 1 / -1; order: 3; }
+  .line-row, .line-row.down-line { grid-template-columns: 1fr 1fr; } .line-row > :first-child, .line-row .ln-reason { grid-column: 1 / -1; } .line-row .ln-del { justify-self: end; }
+  .mc-sess { grid-template-columns: 1fr 1fr; }
+}

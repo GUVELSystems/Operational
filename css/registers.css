@@ -1,0 +1,8 @@
+/* registers.css — Registers y Catalog */
+.reg-filters { margin: 14px 0; }
+.reg-filters .form-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.reg-cards { margin-bottom: 16px; }
+.reg-table th, .reg-table td { white-space: nowrap; }
+.reg-table td.actions { position: sticky; right: 0; background: var(--surface); }
+.cat-form .check { font-size: 13.5px; }
+@media (max-width: 720px) { .reg-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } .reg-cards .kpi-value { font-size: 20px; } .reg-cards .kpi-label { font-size: 11px; } }

@@ -1,0 +1,20 @@
+/* runs.css — módulo Runs (lista de trazabilidad + perfil de corrida) */
+.rn-layout { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; gap: 16px; align-items: start; }
+.rn-list { position: sticky; top: 92px; max-height: calc(100vh - 110px); display: flex; flex-direction: column; } .rn-list h2 { font-size: 20px; display: flex; align-items: center; gap: 8px; }
+.rn-eyebrow { font: 700 10.5px var(--font); letter-spacing: .14em; color: var(--text-3); text-transform: uppercase; }
+.rn-items { display: grid; gap: 8px; overflow-y: auto; padding: 2px 4px 2px 0; min-height: 0; }
+.rn-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--surface); color: var(--ink); cursor: pointer; transition: background .15s, border-color .15s; }
+.rn-item > div { display: grid; min-width: 0; } .rn-item b { font-size: 13.5px; } .rn-item .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rn-item:hover { background: var(--surface-2); } .rn-item.active { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, var(--surface)); }
+.rn-profile { display: grid; gap: 16px; min-width: 0; }
+.rn-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-bottom: 14px; border-bottom: 1px solid var(--line-soft); } .rn-head h2 { font-size: 28px; letter-spacing: -.01em; margin: 2px 0 8px; }
+.rn-tags { display: flex; align-items: center; gap: 10px; } .rn-lot { display: flex; align-items: flex-start; gap: 14px; } .rn-lot > div { display: grid; text-align: right; } .rn-lot b { font-size: 18px; }
+.rn-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.rn-tile, .rn-info { display: grid; gap: 4px; padding: 10px 14px; border: 1px solid var(--line-soft); border-radius: var(--r-sm); background: var(--surface-2); min-width: 0; }
+.rn-tile span, .rn-info span { font-size: 11px; color: var(--text-2); } .rn-tile b { font-size: 20px; font-variant-numeric: tabular-nums; } .rn-info span { font-size: 10px; font-weight: 700; letter-spacing: .06em; color: var(--text-3); } .rn-info b { font-size: 13.5px; overflow-wrap: anywhere; }
+.rn-infos { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.rn-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.rn-panel { border: 1px solid var(--line); border-radius: var(--r-sm); padding: 14px 16px; display: grid; gap: 8px; align-content: start; min-height: 190px; } .rn-panel h3 { font-size: 18px; margin-bottom: 4px; } .rn-down { border-top: 3px solid var(--state-stop); }
+.rn-ev { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--r-sm); } .rn-ev > div { display: grid; }
+.rn-none { text-align: center; margin: auto; padding: 24px 0; }
+@media (max-width: 960px) { .rn-layout { grid-template-columns: 1fr; } .rn-list { position: static; max-height: 380px; } .rn-cols { grid-template-columns: 1fr; } }.rn-item > .ico:last-child { transform: rotate(-90deg); flex: none; }
