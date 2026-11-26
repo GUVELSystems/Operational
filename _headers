@@ -1,0 +1,15 @@
+# Cabeceras de seguridad de Cloudflare Pages (van en la raíz del sitio publicado).
+# Ajusta connect-src con la URL de tu proyecto Supabase.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-src 'self' about: blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+
+# Los activos con nombre fijo no deben cachearse para siempre mientras no tengan hash en el nombre
+/js/*
+  Cache-Control: public, max-age=0, must-revalidate
+/css/*
+  Cache-Control: public, max-age=0, must-revalidate

@@ -1,0 +1,19 @@
+# config.toml — ajustes del proyecto para el CLI de Supabase (en el repo va dentro de la carpeta lowercase `supabase/`).
+project_id = "guvel-operational"
+
+# accept-invite lo llama alguien SIN sesión (aún no tiene cuenta): no exige JWT. Se protege con el token de un solo uso (hash SHA-256).
+[functions.accept-invite]
+verify_jwt = false
+
+# create-company e invite-user exigen JWT válido; los permisos reales los decide SQL (is_platform_admin / owner / admin).
+[functions.create-company]
+verify_jwt = true
+
+[functions.invite-user]
+verify_jwt = true
+
+[auth]
+# Las cuentas las crea accept-invite (email_confirm = true). No se permite el registro libre: nadie entra sin invitación.
+enable_signup = false
+site_url = "https://operational.guvelsystems.com"
+additional_redirect_urls = ["https://operational.*.guvelsystems.com/**"]

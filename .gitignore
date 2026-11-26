@@ -1,0 +1,24 @@
+# Secretos y configuración local — NUNCA al repositorio
+.env
+.env.*
+!.env.example
+config.js
+*.pem
+*.key
+
+# Supabase local
+supabase/.branches/
+supabase/.temp/
+supabase/functions/**/.env
+
+# Sistema / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+node_modules/
+*.log
+
+# Claude Code (configuración local)
+.claude/settings.local.json
