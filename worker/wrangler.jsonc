@@ -1,23 +1,20 @@
 {
-  // wrangler.jsonc — Worker "guvel-operational". NO se ha desplegado todavía.
-  // Al desplegar, estas routes sustituyen lo que hoy sirva operational.guvelsystems.com: haz primero una prueba en otro nombre (ver Github/README.md).
-  "name": "guvel-operational",
+  // wrangler.jsonc — Worker "guveloperational" (el nombre DEBE coincidir con el del Worker en Cloudflare).
+  // PRIMER DEPLOY SIN DOMINIOS: solo publica en su dirección *.workers.dev y no toca operational.guvelsystems.com.
+  // Los dominios de cada empresa (operational.<empresa>.guvelsystems.com) NO van aquí: los agrega la Edge Function create-company
+  // como "Custom Domains" del Worker (igual que la app Quality). Para la empresa madre, cuando todo esté probado, descomenta "routes".
+  "name": "guveloperational",
   "main": "src/index.js",
   "compatibility_date": "2025-01-01",
+  "workers_dev": true,
   "assets": {
-    "directory": "../dist",            // carpeta generada por deploy.yml: index.html, css/, js/, assets/, config.js, _headers
+    "directory": "../dist",
     "binding": "ASSETS",
     "run_worker_first": true,
     "not_found_handling": "single-page-application"
   },
-  // PRIMER DEPLOY SIN ROUTES: solo publica el Worker en su dirección *.workers.dev y no toca operational.guvelsystems.com (portal actual).
-  // Cuando el build funcione, descomenta "routes" y haz otro push: ahí sí toma esos hosts.
-  "workers_dev": true,
   // "routes": [
-  //   // Empresa madre (GUVEL Systems)
-  //   { "pattern": "operational.guvelsystems.com/*", "zone_name": "guvelsystems.com" },
-  //   // Empresas cliente: operational.<empresa>.guvelsystems.com (el comodín solo puede ir al inicio). El Worker deja pasar al origen todo host que no sea operational.*
-  //   { "pattern": "*.guvelsystems.com/*", "zone_name": "guvelsystems.com" }
+  //   { "pattern": "operational.guvelsystems.com", "custom_domain": true }
   // ],
   "observability": { "enabled": true }
 }
