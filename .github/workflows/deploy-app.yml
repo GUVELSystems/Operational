@@ -1,0 +1,31 @@
+name: Deploy app (Cloudflare Worker guveloperational)
+# Publica la app con GitHub Actions + wrangler (no usa la integración Git de Cloudflare).
+# Secretos necesarios (GitHub → Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN  token con permiso Account → Workers Scripts: Edit
+#   CLOUDFLARE_ACCOUNT_ID id de la cuenta de Cloudflare
+#   SUPABASE_URL          https://<ref>.supabase.co
+#   SUPABASE_ANON_KEY     llave pública (sb_publishable_...). NUNCA la service_role
+# Primero solo se ejecuta a mano (Actions → Run workflow). Cuando funcione, se agrega el disparador "push" a main.
+on:
+  workflow_dispatch:
+
+concurrency: { group: deploy-app, cancel-in-progress: false }
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Build dist (archivos estáticos + config pública)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: node worker/build.mjs
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --config worker/wrangler.jsonc
